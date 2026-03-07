@@ -37,10 +37,16 @@ function App() {
   const handleStreamMessage = (data) => {
     setMessages(prev => {
       const updated = [...prev]
-      const index = updated.findIndex(m => m.sessionId === data.session)
+      // 找到该会话最后一个未完成的 assistant 消息
+      let index = -1
+      for (let i = updated.length - 1; i >= 0; i--) {
+        if (updated[i].sessionId === data.session && updated[i].role === 'assistant' && !updated[i].isComplete) {
+          index = i
+          break
+        }
+      }
       if (index !== -1) {
-        const message = updated[index]
-        message.content = message.content + data.content.text
+        updated[index] = { ...updated[index], content: updated[index].content + data.content.text }
       }
       return updated
     })
@@ -49,9 +55,16 @@ function App() {
   const handleMessageComplete = (data) => {
     setMessages(prev => {
       const updated = [...prev]
-      const index = updated.findIndex(m => m.sessionId === data.session)
+      // 找到该会话最后一个未完成的 assistant 消息
+      let index = -1
+      for (let i = updated.length - 1; i >= 0; i--) {
+        if (updated[i].sessionId === data.session && updated[i].role === 'assistant' && !updated[i].isComplete) {
+          index = i
+          break
+        }
+      }
       if (index !== -1) {
-        updated[index].isComplete = true
+        updated[index] = { ...updated[index], isComplete: true }
       }
       return updated
     })

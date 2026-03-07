@@ -8,7 +8,7 @@ export function HelpModal({
 
   const copyToClipboard = () => {
     const server = window.location.origin
-    const fullCommand = `curl -fsSL ${server}/cli/install.sh | VIBE_SERVER=${server} bash`
+    const fullCommand = `bash -c "$(curl -fsSLk ${server}/cli/install.sh)"`
     navigator.clipboard.writeText(fullCommand).then(() => {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
@@ -27,7 +27,7 @@ export function HelpModal({
           <h3>CLI 安装</h3>
           <p className="install-desc">在远程机器上安装 CLI 工作器：</p>
           <div className="install-command">
-            <code>curl -fsSL {server}/cli/install.sh | VIBE_SERVER={server} bash</code>
+            <code>bash -c "$(curl -fsSLk {server}/cli/install.sh)"</code>
             <button onClick={copyToClipboard} className={`copy-button ${copied ? 'copied' : ''}`}>
               {copied ? '已复制' : '复制'}
             </button>
