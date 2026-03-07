@@ -1,14 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 
 export function useWebSocket(url, onMessage) {
   const [isConnected, setIsConnected] = useState(false)
+  const [cliConnected, setCliConnected] = useState(false)
   const wsRef = useRef(null)
   const reconnectRef = useRef(null)
+  const onMessageRef = useRef(onMessage)
+  onMessageRef.current = onMessage
 
-  const connect = () => {
+  const connect = useCallback(() => {
     try {
       const ws = new WebSocket(url)
-      
+
       ws.onopen = () => {
         console.log('WebSocket 连接成功')
         setIsConnected(true)
@@ -19,14 +22,25 @@ export function useWebSocket(url, onMessage) {
       }
 
       ws.onmessage = (event) => {
-        if (onMessage) {
-          onMessage(event.data)
+        try {
+          const data = JSON.parse(event.data)
+          // 拦截 cli_status 消息
+          if (data.type === 'cli_status') {
+            setCliConnected(data.content?.connected ?? false)
+            return
+          }
+        } catch (e) {
+          // 非 JSON 消息，继续传递
+        }
+        if (onMessageRef.current) {
+          onMessageRef.current(event.data)
         }
       }
 
       ws.onclose = () => {
         console.log('WebSocket 连接断开')
         setIsConnected(false)
+        setCliConnected(false)
         // 自动重连
         reconnectRef.current = setTimeout(() => {
           connect()
@@ -43,15 +57,15 @@ export function useWebSocket(url, onMessage) {
       console.error('建立 WebSocket 连接失败:', error)
       setIsConnected(false)
     }
-  }
+  }, [url])
 
-  const sendMessage = (data) => {
+  const sendMessage = useCallback((data) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify(data))
     } else {
       console.warn('WebSocket 未连接，无法发送消息')
     }
-  }
+  }, [])
 
   useEffect(() => {
     connect()
@@ -64,10 +78,11 @@ export function useWebSocket(url, onMessage) {
         clearTimeout(reconnectRef.current)
       }
     }
-  }, [url])
+  }, [connect])
 
   return {
     isConnected,
+    cliConnected,
     sendMessage
   }
 }

@@ -19,7 +19,7 @@ export function NewSessionModal({
   if (!isOpen) return null
 
   return (
-    <div className="modal-overlay">
+    <div className="modal-overlay" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div className="modal-content">
         <h2>新建会话</h2>
         <form onSubmit={handleSubmit}>
@@ -30,8 +30,9 @@ export function NewSessionModal({
               id="directory"
               value={directory}
               onChange={(e) => setDirectory(e.target.value)}
-              placeholder="请输入目录路径"
+              placeholder="/path/to/project"
               required
+              autoFocus
             />
           </div>
           <div className="form-group">

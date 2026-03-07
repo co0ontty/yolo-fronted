@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect } from 'react'
 
 export function ChatView({
   session,
@@ -7,6 +7,7 @@ export function ChatView({
 }) {
   const [inputText, setInputText] = useState('')
   const inputRef = useRef(null)
+  const messagesEndRef = useRef(null)
 
   const handleSend = () => {
     if (inputText.trim()) {
@@ -21,26 +22,35 @@ export function ChatView({
     }
   }, [])
 
+  useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages])
+
+  const permissionClass = `permission-badge mode-${session.permission}`
+
   return (
     <div className="chat-view">
       <div className="chat-header">
         <div className="chat-info">
           <h3>{session.directory}</h3>
-          <p>权限模式: {session.permission}</p>
+          <span className={permissionClass}>{session.permission}</span>
         </div>
       </div>
 
       <div className="message-list">
         {messages.map(message => (
           <div key={message.id} className="message">
-            <div className="message-role">
-              {message.role === 'user' ? '我' : 'AI'}
+            <div className={`message-role ${message.role === 'user' ? 'role-user' : 'role-assistant'}`}>
+              {message.role === 'user' ? 'You' : 'AI'}
             </div>
-            <div className="message-content">
+            <div className={`message-content ${!message.isComplete ? 'streaming' : ''}`}>
               {message.content}
             </div>
           </div>
         ))}
+        <div ref={messagesEndRef} />
       </div>
 
       <div className="message-input">
@@ -56,7 +66,7 @@ export function ChatView({
               handleSend()
             }
           }}
-          rows={3}
+          rows={2}
         />
         <button className="send-button" onClick={handleSend} disabled={!inputText.trim()}>
           发送

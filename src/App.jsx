@@ -13,11 +13,13 @@ function App() {
   const [isNewSessionModalOpen, setIsNewSessionModalOpen] = useState(false)
   const [isHelpModalOpen, setIsHelpModalOpen] = useState(false)
 
-  const { sendMessage, isConnected } = useWebSocket(
-    'ws://localhost:3100/ws',
+  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`
+
+  const { sendMessage, isConnected, cliConnected } = useWebSocket(
+    wsUrl,
     (message) => {
       const data = JSON.parse(message)
-      
+
       switch (data.type) {
         case 'sessions':
           setSessions(data.content)
@@ -107,8 +109,9 @@ function App() {
         onNewSession={() => setIsNewSessionModalOpen(true)}
         onHelp={() => setIsHelpModalOpen(true)}
         isConnected={isConnected}
+        cliConnected={cliConnected}
       />
-      
+
       <div className="chat-area">
         {currentSession ? (
           <ChatView
@@ -118,8 +121,18 @@ function App() {
           />
         ) : (
           <div className="welcome-screen">
-            <h1>Welcome to Vibe Coding</h1>
-            <p>Create a new session to start coding</p>
+            <div className="welcome-content">
+              <div className="welcome-brand">VIBE CODING</div>
+              <h1 className="welcome-title">
+                Code with<br /><span>AI.</span>
+              </h1>
+              <p className="welcome-subtitle">
+                创建一个会话，开始与 Claude Code 协作编程。
+              </p>
+              <div className="welcome-hint">
+                点击左侧 <kbd>+ 新会话</kbd> 开始
+              </div>
+            </div>
           </div>
         )}
       </div>
