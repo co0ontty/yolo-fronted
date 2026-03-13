@@ -24,7 +24,6 @@ export function Login({ onLogin }) {
       const data = await response.json()
 
       if (data.success) {
-        // 保存 token 到 localStorage
         localStorage.setItem('auth_token', data.token)
         onLogin(data.token)
       } else {
@@ -47,8 +46,10 @@ export function Login({ onLogin }) {
 
       <div className="login-box">
         <div className="login-brand">
-          <h1 className="login-title">VIBE CODING</h1>
-          <p className="login-subtitle">Claude Code Session Manager</p>
+          <div className="login-title">VIBE CODING</div>
+          <h1 className="login-subtitle">
+            Code with <span>AI.</span>
+          </h1>
         </div>
 
         <form onSubmit={handleSubmit} className="login-form">
@@ -78,7 +79,12 @@ export function Login({ onLogin }) {
             />
           </div>
 
-          {error && <div className="error-message">{error}</div>}
+          {error && (
+            <div className="error-message">
+              <span>⚠️</span>
+              {error}
+            </div>
+          )}
 
           <button type="submit" className="login-button" disabled={loading}>
             {loading ? '登录中...' : '登录'}

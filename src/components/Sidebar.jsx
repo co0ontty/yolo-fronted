@@ -59,15 +59,10 @@ export function Sidebar({
       <div className="sidebar-header">
         <h2>Vibe Coding</h2>
         <div className="connection-status">
-          {isConnected ? (
-            cliConnected ? (
-              <span className="status-connected">已就绪</span>
-            ) : (
-              <span className="status-warning">CLI 未连接</span>
-            )
-          ) : (
-            <span className="status-disconnected">未连接</span>
-          )}
+          <span className={`status-dot ${isConnected ? (cliConnected ? 'connected' : '') : 'disconnected'}`} />
+          <span className="status-text">
+            {isConnected ? (cliConnected ? '已连接' : 'CLI 连接中...') : '连接中...'}
+          </span>
         </div>
       </div>
 
@@ -76,6 +71,12 @@ export function Sidebar({
           {sortedSessions.length === 0 ? (
             <div className="empty-sessions">
               <p>暂无会话</p>
+              <button className="quick-start-btn" onClick={onNewSession}>
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.5">
+                  <path d="M12 5v14M5 12h14"/>
+                </svg>
+                创建会话
+              </button>
             </div>
           ) : (
             sortedSessions.map(session => (
@@ -89,7 +90,7 @@ export function Sidebar({
                   className="session-info"
                   onClick={() => onSelectSession(session)}
                 >
-                  <div className="session-id">{session.id}</div>
+                  <div className="session-id">#{session.id.slice(0, 8)}</div>
                   <div className="session-directory">
                     {session.directory}
                   </div>
@@ -97,15 +98,16 @@ export function Sidebar({
                     <span className="session-permission">
                       {session.permission}
                     </span>
-                    <span className="session-time" title={`创建：${new Date(session.created_at).toLocaleString('zh-CN')}`}>
+                    <span className="session-time">
                       {formatTime(session.created_at)}
                     </span>
                   </div>
                 </div>
                 <button
-                  className="delete-btn"
+                  className="delete-session-btn"
                   onClick={(e) => handleDeleteClick(e, session)}
                   title="删除会话"
+                  aria-label={`删除会话 ${session.directory}`}
                 >
                   ×
                 </button>
@@ -116,7 +118,7 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-footer">
-        <button onClick={onLogout} className="logout-button">
+        <button onClick={onLogout} className="logout-btn">
           退出登录
         </button>
       </div>

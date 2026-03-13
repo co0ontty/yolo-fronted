@@ -1,15 +1,15 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { ChatView } from './components/ChatView'
 import { NewSessionModal } from './components/NewSessionModal'
 import { HelpModal } from './components/HelpModal'
 import { PermissionModal } from './components/PermissionModal'
 import { CommandPalette } from './components/CommandPalette'
-import { StatusBar } from './components/StatusBar'
 import { ChatInput } from './components/ChatInput'
 import { MarkdownContent } from './components/MarkdownContent'
 import { Login } from './components/Login'
 import { useWebSocket } from './hooks/useWebSocket'
+import './App.mobile.css'
 
 function App() {
   const [sessions, setSessions] = useState([])
@@ -120,13 +120,15 @@ function App() {
       const updated = [...prev]
       let index = -1
       for (let i = updated.length - 1; i >= 0; i--) {
-        if (updated[i].sessionId === data.session && updated[i].role === 'assistant' && !updated[i].isComplete) {
+        if (updated[i].sessionId === data.session_id && updated[i].role === 'assistant' && !updated[i].isComplete) {
           index = i
           break
         }
       }
       if (index !== -1) {
-        updated[index] = { ...updated[index], content: updated[index].content + data.content.text }
+        // 后端发送的是 data.content (字符串)，不是 data.content.text
+        const textContent = typeof data.content === 'string' ? data.content : (data.content?.text || '')
+        updated[index] = { ...updated[index], content: updated[index].content + textContent }
       }
       return updated
     })
@@ -138,7 +140,7 @@ function App() {
       const updated = [...prev]
       let index = -1
       for (let i = updated.length - 1; i >= 0; i--) {
-        if (updated[i].sessionId === data.session && updated[i].role === 'assistant' && !updated[i].isComplete) {
+        if (updated[i].sessionId === data.session_id && updated[i].role === 'assistant' && !updated[i].isComplete) {
           index = i
           break
         }
@@ -330,7 +332,7 @@ function App() {
 
   const exportSession = () => {
     if (!currentSession || messages.length === 0) return
-    
+
     const markdown = messages.map(msg => {
       const role = msg.role === 'user' ? '🧑 You' : msg.role === 'assistant' ? '🤖 AI' : '⚙️ System'
       return `## ${role}\n\n${msg.content}\n`
@@ -436,8 +438,7 @@ function App() {
 
   return (
     <div className="app-container">
-      {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
-
+      {/* 侧边栏 */}
       <Sidebar
         sessions={sessions}
         currentSession={currentSession}
@@ -452,110 +453,131 @@ function App() {
         onLogout={handleLogout}
       />
 
-      <div className="chat-area">
-        <div className="top-bar">
-          <button
-            className="menu-toggle"
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            aria-label="切换菜单"
-          >
-            <span className={sidebarOpen ? 'open' : ''}></span>
-          </button>
-          <div className="top-actions">
+      {/* 侧边栏遮罩 */}
+      {sidebarOpen && (
+        <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
+      )}
+
+      {/* 主内容区域 */}
+      <div className="main-content">
+        {/* 顶部导航栏 */}
+        <header className="top-nav">
+          <div className="top-nav-left">
             <button
-              className="top-action-btn new-btn"
-              onClick={() => setIsNewSessionModalOpen(true)}
-              title="新会话 (Ctrl+N)"
+              className="menu-toggle"
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              aria-label="切换菜单"
             >
-              + 新会话
-            </button>
-            <button
-              className="top-action-btn help-btn"
-              onClick={() => setIsHelpModalOpen(true)}
-              title="安装指南 (Ctrl+?)"
-            >
-              ?
+              <span className={sidebarOpen ? 'open' : ''}></span>
+              <span></span>
+              <span></span>
             </button>
           </div>
-        </div>
 
-        {currentSession ? (
-          <>
-            <div className="chat-header">
-              <div className="chat-info">
-                <h3>{currentSession.directory}</h3>
-                <span className={`permission-badge mode-${currentSession.permission}`}>
-                  {currentSession.permission}
-                </span>
-              </div>
-              <div className="chat-actions">
-                <button 
-                  className="chat-action-btn" 
-                  onClick={() => setIsCommandPaletteOpen(true)}
-                  title="命令面板 (Ctrl+K)"
-                >
-                  ⌘K
-                </button>
-                <button 
-                  className="chat-action-btn"
-                  onClick={stopGeneration}
-                  disabled={!isGenerating}
-                  title="停止生成 (Ctrl+X)"
-                >
-                  ⏹️
-                </button>
-              </div>
-            </div>
-
-            <div className="message-list">
-              {messages.map(message => (
-                <div key={message.id} className={`message ${message.role}`}>
-                  <div className={`message-role role-${message.role}`}>
-                    {message.role === 'user' ? '🧑' : message.role === 'assistant' ? '🤖' : '⚙️'}
-                  </div>
-                  <div className={`message-content ${!message.isComplete ? 'streaming' : ''}`}>
-                    {renderMessageContent(message)}
-                  </div>
+          <div className="top-nav-center">
+            {currentSession ? (
+              <div className="nav-title-wrapper">
+                <div className="nav-title">{currentSession.directory}</div>
+                <div className="nav-subtitle">
+                  <span className={`nav-badge mode-${currentSession.permission}`}>
+                    {currentSession.permission}
+                  </span>
                 </div>
-              ))}
-              <div className="message-list-end" />
-            </div>
+              </div>
+            ) : (
+              <div className="nav-title">Vibe Coding</div>
+            )}
+          </div>
 
-            <div className="message-input-wrapper">
-              <ChatInput
-                value={inputText}
-                onChange={setInputText}
-                onSend={handleSendMessage}
-                disabled={isGenerating || !cliConnected}
-                placeholder={cliConnected ? "输入消息，或输入 / 查看命令..." : "CLI 未连接"}
-              />
-            </div>
-          </>
-        ) : (
-          <div className="welcome-screen">
-            <div className="welcome-content">
-              <div className="welcome-brand">VIBE CODING</div>
-              <h1 className="welcome-title">
-                Code with<br /><span>AI.</span>
-              </h1>
-              <p className="welcome-subtitle">
-                创建一个会话，开始与 Claude Code 协作编程。
-              </p>
-              <div className="welcome-hint">
-                按 <kbd>Ctrl+K</kbd> 打开命令面板
+          <div className="top-nav-right">
+            <button
+              className="icon-btn"
+              onClick={() => setIsCommandPaletteOpen(true)}
+              aria-label="命令面板"
+              title="命令面板 (Ctrl+K)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/>
+                <path d="M21 21l-4.35-4.35"/>
+              </svg>
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => setIsHelpModalOpen(true)}
+              aria-label="帮助文档"
+              title="帮助文档 (Ctrl+?)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                <path d="M12 17h.01"/>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        {/* 聊天内容 */}
+        <div className="chat-container">
+          {currentSession ? (
+            <>
+              {/* 消息列表 */}
+              <div className="messages-container">
+                {messages.map(message => (
+                  <div key={message.id} className={`message ${message.role}`}>
+                    <div className="message-header">
+                      <span className="message-role">
+                        {message.role === 'user' ? '你' : message.role === 'assistant' ? 'AI' : '系统'}
+                      </span>
+                    </div>
+                    <div className={`message-bubble ${!message.isComplete ? 'streaming' : ''}`}>
+                      <div className="message-content">
+                        {renderMessageContent(message)}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                <div className="message-list-end" />
+              </div>
+
+              {/* 输入区域 */}
+              <div className="input-area">
+                <ChatInput
+                  value={inputText}
+                  onChange={setInputText}
+                  onSend={handleSendMessage}
+                  onStop={stopGeneration}
+                  isGenerating={isGenerating}
+                  disabled={isGenerating || !cliConnected}
+                  placeholder={cliConnected ? "输入消息，或输入 / 查看命令..." : "CLI 未连接"}
+                />
+              </div>
+            </>
+          ) : (
+            <div className="welcome-screen">
+              <div className="welcome-content">
+                <div className="welcome-brand">VIBE CODING</div>
+                <h1 className="welcome-title">
+                  Code with<br /><span>AI.</span>
+                </h1>
+                <p className="welcome-subtitle">
+                  创建一个会话，开始与 Claude Code 协作编程。
+                </p>
+                <button
+                  className="quick-start-btn"
+                  onClick={() => setIsNewSessionModalOpen(true)}
+                >
+                  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M12 5v14M5 12h14"/>
+                  </svg>
+                  新建会话
+                </button>
               </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      <StatusBar
-        isConnected={isConnected}
-        cliConnected={cliConnected}
-        session={currentSession}
-        tokenUsage={tokenUsage}
-      />
-
+      {/* 模态框 */}
       <NewSessionModal
         isOpen={isNewSessionModalOpen}
         onClose={() => setIsNewSessionModalOpen(false)}

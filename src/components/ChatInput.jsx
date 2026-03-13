@@ -1,12 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { SlashCommandAutocomplete } from './SlashCommandAutocomplete'
 
-export function ChatInput({ 
-  value, 
-  onChange, 
-  onSend, 
+export function ChatInput({
+  value,
+  onChange,
+  onSend,
+  onStop,
   disabled,
-  placeholder = '输入消息...' 
+  isGenerating,
+  placeholder = '输入消息...'
 }) {
   const [isFocused, setIsFocused] = useState(false)
   const [cursorPosition, setCursorPosition] = useState(0)
@@ -18,16 +20,16 @@ export function ChatInput({
     const textAfterCursor = value.substring(cursorPosition)
     const lines = textBeforeCursor.split('\n')
     const currentLine = lines[lines.length - 1]
-    
+
     const slashMatch = currentLine.match(/\/(\w*)$/)
     if (slashMatch) {
       const beforeSlash = textBeforeCursor.slice(0, -slashMatch[1].length - 1)
       const newText = beforeSlash + `/${command} `
       const newCursorPos = newText.length
-      
+
       onChange(newText + textAfterCursor.slice(slashMatch.index + slashMatch[0].length))
       setCursorPosition(newCursorPos)
-      
+
       setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.focus()
@@ -35,7 +37,7 @@ export function ChatInput({
         }
       }, 0)
     }
-    
+
     setShowSlashCommands(false)
   }, [value, cursorPosition, onChange])
 
@@ -48,17 +50,17 @@ export function ChatInput({
     const textBeforeCursor = newValue.substring(0, newCursorPosition)
     const lastLine = textBeforeCursor.split('\n').pop()
     const isSlashCommand = /^\/\w*$/.test(lastLine)
-    
+
     setShowSlashCommands(isSlashCommand)
   }
 
   const handleSelect = (e) => {
     setCursorPosition(e.target.selectionStart)
-    
+
     const textBeforeCursor = e.target.value.substring(0, e.target.selectionStart)
     const lastLine = textBeforeCursor.split('\n').pop()
     const isSlashCommand = /^\/\w*$/.test(lastLine)
-    
+
     setShowSlashCommands(isSlashCommand)
   }
 
@@ -77,41 +79,63 @@ export function ChatInput({
     }
   }, [isFocused])
 
+  // 自动调整 textarea 高度
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'
+      textareaRef.current.style.height = Math.min(textareaRef.current.scrollHeight, 120) + 'px'
+    }
+  }, [value])
+
   return (
-    <div className={`chat-input-container ${isFocused ? 'focused' : ''}`}>
-      <div className="chat-input-wrapper">
-        <textarea
-          ref={textareaRef}
-          className="chat-input-field"
-          placeholder={placeholder}
-          value={value}
-          onChange={handleChange}
-          onSelect={handleSelect}
-          onKeyDown={handleKeyDown}
-          onFocus={() => setIsFocused(true)}
-          onBlur={() => setIsFocused(false)}
-          rows={1}
-          disabled={disabled}
-        />
-        
-        {showSlashCommands && (
-          <SlashCommandAutocomplete
-            inputValue={value}
-            cursorPosition={cursorPosition}
-            onSelect={handleSlashCommandSelect}
-            onClose={() => setShowSlashCommands(false)}
-          />
+    <div className={`input-wrapper ${isFocused ? 'focused' : ''}`}>
+      <textarea
+        ref={textareaRef}
+        className="input-field"
+        placeholder={placeholder}
+        value={value}
+        onChange={handleChange}
+        onSelect={handleSelect}
+        onKeyDown={handleKeyDown}
+        onFocus={() => setIsFocused(true)}
+        onBlur={() => setIsFocused(false)}
+        rows={1}
+        disabled={disabled}
+      />
+
+      <div className="input-buttons">
+        {isGenerating && (
+          <button
+            className="stop-btn"
+            onClick={onStop}
+            aria-label="停止生成"
+            title="停止生成 (Ctrl+X)"
+          >
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <rect x="6" y="6" width="12" height="12" rx="2"/>
+            </svg>
+          </button>
         )}
+        <button
+          className="send-btn"
+          onClick={() => onSend(value.trim())}
+          disabled={!value.trim() || disabled}
+          aria-label="发送消息"
+        >
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3.478 2.404a.75.75 0 0 0-.926.941l2.432 7.905H13.5a.75.75 0 0 1 0 1.5H4.984l-2.432 7.905a.75.75 0 0 0 .926.94 60.519 60.519 0 0 0 18.445-8.986.75.75 0 0 0 0-1.218A60.517 60.517 0 0 0 3.478 2.404Z"/>
+          </svg>
+        </button>
       </div>
-      
-      <button 
-        className="chat-send-button"
-        onClick={() => onSend(value.trim())}
-        disabled={!value.trim() || disabled}
-      >
-        <span>发送</span>
-        <span className="send-icon">➤</span>
-      </button>
+
+      {showSlashCommands && (
+        <SlashCommandAutocomplete
+          inputValue={value}
+          cursorPosition={cursorPosition}
+          onSelect={handleSlashCommandSelect}
+          onClose={() => setShowSlashCommands(false)}
+        />
+      )}
     </div>
   )
 }

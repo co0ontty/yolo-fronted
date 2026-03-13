@@ -1,12 +1,16 @@
+/* ============================================
+   登录页面 - 统一配色设计
+   ============================================ */
 .login-container {
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: var(--space-xl);
   position: relative;
   overflow: hidden;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  background: linear-gradient(135deg, #0a0a0a 0%, #111111 100%);
 }
 
 .login-background {
@@ -19,154 +23,192 @@
   z-index: 0;
 }
 
+/* 渐变背景效果 - 统一使用蓝灰色系 */
 .gradient-circle {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.3;
+  filter: blur(100px);
+  opacity: 0.12;
 }
 
 .gradient-circle-1 {
-  width: 400px;
-  height: 400px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  width: 300px;
+  height: 300px;
+  background: linear-gradient(135deg, #475569, #64748b);
   top: -100px;
   left: -100px;
 }
 
 .gradient-circle-2 {
-  width: 300px;
-  height: 300px;
-  background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  bottom: -50px;
-  right: -50px;
+  width: 250px;
+  height: 250px;
+  background: linear-gradient(135deg, #475569, #334155);
+  bottom: -80px;
+  right: -80px;
 }
 
 .gradient-circle-3 {
-  width: 250px;
-  height: 250px;
-  background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+  width: 200px;
+  height: 200px;
+  background: linear-gradient(135deg, #64748b, #94a3b8);
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
 }
 
 .login-box {
-  background: rgba(255, 255, 255, 0.95);
-  border-radius: 20px;
-  padding: 48px 40px;
-  width: 100%;
-  max-width: 420px;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3);
+  position: relative;
   z-index: 1;
-  backdrop-filter: blur(10px);
+  width: 100%;
+  max-width: 400px;
 }
 
 .login-brand {
   text-align: center;
-  margin-bottom: 40px;
+  margin-bottom: var(--space-xl);
 }
 
 .login-title {
-  font-size: 32px;
-  font-weight: 800;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  margin: 0 0 8px 0;
-  letter-spacing: 2px;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 4px;
+  text-transform: uppercase;
+  color: #94a3b8;
+  margin-bottom: var(--space-md);
 }
 
 .login-subtitle {
-  color: #666;
-  font-size: 14px;
-  margin: 0;
+  font-size: 28px;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.2;
+}
+
+.login-subtitle span {
+  background: linear-gradient(135deg, #94a3b8, #cbd5e1);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .login-form {
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: var(--space-lg);
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: var(--space-sm);
 }
 
 .form-group label {
-  font-size: 14px;
+  font-size: 12px;
   font-weight: 600;
-  color: #333;
+  color: #a0a0a0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .form-group input {
-  padding: 14px 16px;
-  border: 2px solid #e1e1e1;
-  border-radius: 10px;
+  padding: var(--space-md) var(--space-lg);
+  border: 1px solid rgba(71, 85, 105, 0.3);
+  border-radius: var(--radius-md);
   font-size: 15px;
-  transition: all 0.3s ease;
-  background: #fff;
+  font-family: var(--font-sans);
+  background: rgba(22, 22, 22, 0.8);
+  color: #ffffff;
+  transition: all var(--duration-fast);
 }
 
 .form-group input:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 4px rgba(102, 126, 234, 0.1);
+  border-color: #64748b;
+  box-shadow: 0 0 0 3px rgba(71, 85, 105, 0.2);
+  background: rgba(22, 22, 22, 0.95);
 }
 
-.form-group input:hover {
-  border-color: #999;
+.form-group input::placeholder {
+  color: #666666;
 }
 
 .error-message {
-  background: #fee2e2;
-  color: #dc2626;
-  padding: 12px 16px;
-  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-sm);
+  padding: var(--space-md);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md);
+  color: #fca5a5;
   font-size: 14px;
-  text-align: center;
-  border: 1px solid #fecaca;
+  font-weight: 500;
+  animation: shake 0.4s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-8px); }
+  75% { transform: translateX(8px); }
 }
 
 .login-button {
-  padding: 16px 24px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: #fff;
+  padding: var(--space-md) var(--space-xl);
+  background: linear-gradient(135deg, #475569, #334155);
+  color: white;
   border: none;
-  border-radius: 10px;
-  font-size: 16px;
+  border-radius: var(--radius-full);
+  font-size: 15px;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+  transition: all var(--duration-fast);
+  box-shadow: 0 4px 16px rgba(71, 85, 105, 0.4);
 }
 
 .login-button:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(102, 126, 234, 0.5);
+  box-shadow: 0 8px 32px rgba(71, 85, 105, 0.5);
+  background: linear-gradient(135deg, #64748b, #475569);
 }
 
 .login-button:active:not(:disabled) {
-  transform: translateY(0);
+  transform: scale(0.98);
 }
 
 .login-button:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
+  transform: none;
 }
 
 .login-hint {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid #e1e1e1;
+  margin-top: var(--space-xl);
+  padding-top: var(--space-lg);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  text-align: center;
 }
 
 .login-hint p {
-  text-align: center;
-  color: #999;
+  color: #666666;
   font-size: 12px;
-  margin: 0;
+  line-height: 1.5;
+}
+
+/* 移动端适配 */
+@media (max-width: 480px) {
+  .login-container {
+    padding: var(--space-md);
+  }
+
+  .login-subtitle {
+    font-size: 24px;
+  }
+
+  .gradient-circle-1,
+  .gradient-circle-2,
+  .gradient-circle-3 {
+    opacity: 0.1;
+  }
 }

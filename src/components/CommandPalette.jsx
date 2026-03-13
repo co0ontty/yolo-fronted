@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useRef, useCallback } from 'react'
 
 const COMMANDS = [
   {
@@ -12,7 +12,7 @@ const COMMANDS = [
     id: 'switch_session',
     label: '切换会话',
     description: '在会话之间切换',
-    shortcut: 'Ctrl+A',
+    shortcut: '',
     icon: '🔄'
   },
   {
@@ -77,23 +77,20 @@ export function CommandPalette({ isOpen, onClose, onExecute, sessions, currentSe
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef(null)
-  const listRef = useRef(null)
 
   const filteredCommands = COMMANDS.filter(cmd =>
     cmd.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
     cmd.description.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  useEffect(() => {
-    if (isOpen && inputRef.current) {
-      inputRef.current.focus()
-      setSearchTerm('')
-      setSelectedIndex(0)
-    }
-  }, [isOpen])
-
-  useEffect(() => {
-    if (!isOpen) {
+  // 重置状态当打开时
+  React.useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus()
+        }
+      }, 50)
       setSearchTerm('')
       setSelectedIndex(0)
     }
@@ -123,20 +120,22 @@ export function CommandPalette({ isOpen, onClose, onExecute, sessions, currentSe
     <div className="command-palette-overlay" onClick={onClose}>
       <div className="command-palette" onClick={e => e.stopPropagation()}>
         <div className="command-palette-input">
-          <span className="command-palette-icon">🔍</span>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/>
+            <path d="M21 21l-4.35-4.35"/>
+          </svg>
           <input
             ref={inputRef}
             type="text"
-            placeholder="输入命令..."
+            placeholder="搜索命令..."
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
             onKeyDown={handleKeyDown}
           />
-          <kbd className="command-palette-hint">ESC</kbd>
         </div>
 
         {filteredCommands.length > 0 ? (
-          <ul className="command-palette-list" ref={listRef}>
+          <ul className="command-palette-list">
             {filteredCommands.map((cmd, index) => (
               <li
                 key={cmd.id}
@@ -152,7 +151,7 @@ export function CommandPalette({ isOpen, onClose, onExecute, sessions, currentSe
                   <div className="command-palette-label">
                     {cmd.label}
                     {cmd.shortcut && (
-                      <kbd className="command-palette-shortcut">{cmd.shortcut}</kbd>
+                      <span className="command-palette-shortcut">{cmd.shortcut}</span>
                     )}
                   </div>
                   <div className="command-palette-description">{cmd.description}</div>
@@ -167,15 +166,9 @@ export function CommandPalette({ isOpen, onClose, onExecute, sessions, currentSe
         )}
 
         <div className="command-palette-footer">
-          <span>
-            <kbd>↑↓</kbd> 导航
-          </span>
-          <span>
-            <kbd>Enter</kbd> 执行
-          </span>
-          <span>
-            <kbd>ESC</kbd> 关闭
-          </span>
+          <span><kbd>↑↓</kbd> 导航</span>
+          <span><kbd>Enter</kbd> 执行</span>
+          <span><kbd>ESC</kbd> 关闭</span>
         </div>
       </div>
     </div>
