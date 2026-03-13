@@ -39,7 +39,8 @@ export function Sidebar({
   isConnected,
   cliConnected,
   isOpen,
-  onToggle
+  onToggle,
+  onLogout
 }) {
   // 按创建时间倒序排列（最新的在最上面）
   const sortedSessions = [...sessions].sort((a, b) => {
@@ -68,15 +69,6 @@ export function Sidebar({
             <span className="status-disconnected">未连接</span>
           )}
         </div>
-      </div>
-
-      <div className="sidebar-actions">
-        <button onClick={onNewSession} className="new-session-button">
-          + 新会话
-        </button>
-        <button onClick={onHelp} className="help-button">
-          ?
-        </button>
       </div>
 
       <div className="sidebar-content">
@@ -121,6 +113,12 @@ export function Sidebar({
             ))
           )}
         </div>
+      </div>
+
+      <div className="sidebar-footer">
+        <button onClick={onLogout} className="logout-button">
+          退出登录
+        </button>
       </div>
     </div>
   )

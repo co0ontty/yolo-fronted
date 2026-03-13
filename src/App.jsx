@@ -8,6 +8,7 @@ import { CommandPalette } from './components/CommandPalette'
 import { StatusBar } from './components/StatusBar'
 import { ChatInput } from './components/ChatInput'
 import { MarkdownContent } from './components/MarkdownContent'
+import { Login } from './components/Login'
 import { useWebSocket } from './hooks/useWebSocket'
 
 function App() {
@@ -22,8 +23,67 @@ function App() {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false)
   const [isGenerating, setIsGenerating] = useState(false)
   const [tokenUsage, setTokenUsage] = useState(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
+  const [authToken, setAuthToken] = useState(null)
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true)
 
   const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`
+
+  // 检查认证状态
+  useEffect(() => {
+    const checkAuth = async () => {
+      const token = localStorage.getItem('auth_token')
+      if (!token) {
+        setIsCheckingAuth(false)
+        return
+      }
+
+      try {
+        const response = await fetch('/api/check-session', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        })
+        const data = await response.json()
+        if (data.authenticated) {
+          setIsAuthenticated(true)
+          setAuthToken(token)
+        }
+      } catch (err) {
+        console.error('检查认证状态失败:', err)
+      } finally {
+        setIsCheckingAuth(false)
+      }
+    }
+
+    checkAuth()
+  }, [])
+
+  // 处理登录
+  const handleLogin = useCallback((token) => {
+    setIsAuthenticated(true)
+    setAuthToken(token)
+  }, [])
+
+  // 处理登出
+  const handleLogout = useCallback(async () => {
+    try {
+      await fetch('/api/logout', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${authToken}`,
+        },
+      })
+    } catch (err) {
+      console.error('登出失败:', err)
+    }
+    localStorage.removeItem('auth_token')
+    setIsAuthenticated(false)
+    setAuthToken(null)
+    setSessions([])
+    setCurrentSession(null)
+    setMessages([])
+  }, [authToken])
 
   const { sendMessage, isConnected, cliConnected } = useWebSocket(
     wsUrl,
@@ -50,7 +110,8 @@ function App() {
           setTokenUsage(data.content)
           break
       }
-    }
+    },
+    authToken
   )
 
   const handleStreamMessage = (data) => {
@@ -356,6 +417,23 @@ function App() {
     return <span>{message.content}</span>
   }
 
+  // 检查认证状态
+  if (isCheckingAuth) {
+    return (
+      <div className="app-container">
+        <div className="loading-screen">
+          <div className="loading-spinner"></div>
+          <p>加载中...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // 未登录，显示登录页面
+  if (!isAuthenticated) {
+    return <Login onLogin={handleLogin} />
+  }
+
   return (
     <div className="app-container">
       {sidebarOpen && <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />}
@@ -371,16 +449,35 @@ function App() {
         cliConnected={cliConnected}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
+        onLogout={handleLogout}
       />
 
       <div className="chat-area">
-        <button
-          className="menu-toggle"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          aria-label="切换菜单"
-        >
-          <span className={sidebarOpen ? 'open' : ''}></span>
-        </button>
+        <div className="top-bar">
+          <button
+            className="menu-toggle"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            aria-label="切换菜单"
+          >
+            <span className={sidebarOpen ? 'open' : ''}></span>
+          </button>
+          <div className="top-actions">
+            <button
+              className="top-action-btn new-btn"
+              onClick={() => setIsNewSessionModalOpen(true)}
+              title="新会话 (Ctrl+N)"
+            >
+              + 新会话
+            </button>
+            <button
+              className="top-action-btn help-btn"
+              onClick={() => setIsHelpModalOpen(true)}
+              title="安装指南 (Ctrl+?)"
+            >
+              ?
+            </button>
+          </div>
+        </div>
 
         {currentSession ? (
           <>

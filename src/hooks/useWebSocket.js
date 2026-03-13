@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 
-export function useWebSocket(url, onMessage) {
+export function useWebSocket(url, onMessage, authToken) {
   const [isConnected, setIsConnected] = useState(false)
   const [cliConnected, setCliConnected] = useState(false)
   const wsRef = useRef(null)
@@ -10,7 +10,12 @@ export function useWebSocket(url, onMessage) {
 
   const connect = useCallback(() => {
     try {
-      const ws = new WebSocket(url)
+      // 添加 token 参数到 URL 用于认证
+      const separator = url.includes('?') ? '&' : '?'
+      const tokenParam = authToken ? `${separator}token=${encodeURIComponent(authToken)}` : ''
+      const wsUrl = url + tokenParam
+
+      const ws = new WebSocket(wsUrl)
 
       ws.onopen = () => {
         console.log('WebSocket 连接成功')
@@ -57,7 +62,7 @@ export function useWebSocket(url, onMessage) {
       console.error('建立 WebSocket 连接失败:', error)
       setIsConnected(false)
     }
-  }, [url])
+  }, [url, authToken])
 
   const sendMessage = useCallback((data) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -68,7 +73,9 @@ export function useWebSocket(url, onMessage) {
   }, [])
 
   useEffect(() => {
-    connect()
+    if (authToken) {
+      connect()
+    }
 
     return () => {
       if (wsRef.current) {
@@ -78,7 +85,7 @@ export function useWebSocket(url, onMessage) {
         clearTimeout(reconnectRef.current)
       }
     }
-  }, [connect])
+  }, [connect, authToken])
 
   return {
     isConnected,
