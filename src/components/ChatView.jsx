@@ -24,11 +24,44 @@ export function ChatView({
 
   useEffect(() => {
     if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' })
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' })
     }
   }, [messages])
 
+  // 移动端：消息更新后自动聚焦输入框
+  useEffect(() => {
+    if (messages.length > 0 && inputRef.current && window.innerWidth <= 480) {
+      // 短暂延迟确保键盘弹出
+      const timer = setTimeout(() => {
+        inputRef.current?.focus()
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [messages.length])
+
   const permissionClass = `permission-badge mode-${session.permission}`
+
+  const getRoleClass = (role) => {
+    switch (role) {
+      case 'user':
+        return 'role-user'
+      case 'system':
+        return 'role-system'
+      default:
+        return 'role-assistant'
+    }
+  }
+
+  const getRoleLabel = (role) => {
+    switch (role) {
+      case 'user':
+        return 'You'
+      case 'system':
+        return 'SYS'
+      default:
+        return 'AI'
+    }
+  }
 
   return (
     <div className="chat-view">
@@ -41,9 +74,9 @@ export function ChatView({
 
       <div className="message-list">
         {messages.map(message => (
-          <div key={message.id} className="message">
-            <div className={`message-role ${message.role === 'user' ? 'role-user' : 'role-assistant'}`}>
-              {message.role === 'user' ? 'You' : 'AI'}
+          <div key={message.id} className={`message ${message.role}`}>
+            <div className={`message-role ${getRoleClass(message.role)}`}>
+              {getRoleLabel(message.role)}
             </div>
             <div className={`message-content ${!message.isComplete ? 'streaming' : ''}`}>
               {message.content}

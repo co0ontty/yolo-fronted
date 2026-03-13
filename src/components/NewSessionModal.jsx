@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 
 export function NewSessionModal({
   isOpen,
@@ -15,6 +15,29 @@ export function NewSessionModal({
       permission
     })
   }
+
+  // 移动端优化：弹窗打开时禁用背景滚动
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden'
+      return () => {
+        document.body.style.overflow = ''
+      }
+    }
+  }, [isOpen])
+
+  // 移动端优化：自动聚焦输入框
+  useEffect(() => {
+    if (isOpen) {
+      const timer = setTimeout(() => {
+        const input = document.getElementById('directory')
+        if (input && window.innerWidth <= 480) {
+          input.focus()
+        }
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [isOpen])
 
   if (!isOpen) return null
 
