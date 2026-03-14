@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback } from 'react'
 
 const COMMANDS = [
   {
@@ -77,6 +77,7 @@ export function CommandPalette({ isOpen, onClose, onExecute, sessions, currentSe
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef(null)
+  const focusTimeoutRef = useRef(null)
 
   const filteredCommands = COMMANDS.filter(cmd =>
     cmd.label.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -84,9 +85,14 @@ export function CommandPalette({ isOpen, onClose, onExecute, sessions, currentSe
   )
 
   // 重置状态当打开时
-  React.useEffect(() => {
+  useEffect(() => {
     if (isOpen) {
-      setTimeout(() => {
+      // Clear any existing timeout
+      if (focusTimeoutRef.current) {
+        clearTimeout(focusTimeoutRef.current)
+      }
+
+      focusTimeoutRef.current = setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus()
         }
@@ -95,6 +101,15 @@ export function CommandPalette({ isOpen, onClose, onExecute, sessions, currentSe
       setSelectedIndex(0)
     }
   }, [isOpen])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (focusTimeoutRef.current) {
+        clearTimeout(focusTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleKeyDown = useCallback((e) => {
     if (e.key === 'ArrowDown') {

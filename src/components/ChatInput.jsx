@@ -1,6 +1,13 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { SlashCommandAutocomplete } from './SlashCommandAutocomplete'
 
+// Helper function to check if cursor is at a slash command
+function isSlashCommandActive(text, cursorPosition) {
+  const textBeforeCursor = text.substring(0, cursorPosition)
+  const lastLine = textBeforeCursor.split('\n').pop()
+  return /^\/\w*$/.test(lastLine)
+}
+
 export function ChatInput({
   value,
   onChange,
@@ -10,10 +17,10 @@ export function ChatInput({
   isGenerating,
   placeholder = '输入消息...'
 }) {
-  const [isFocused, setIsFocused] = useState(false)
   const [cursorPosition, setCursorPosition] = useState(0)
   const [showSlashCommands, setShowSlashCommands] = useState(false)
   const textareaRef = useRef(null)
+  const focusTimeoutRef = useRef(null)
 
   const handleSlashCommandSelect = useCallback((command) => {
     const textBeforeCursor = value.substring(0, cursorPosition)
@@ -30,7 +37,12 @@ export function ChatInput({
       onChange(newText + textAfterCursor.slice(slashMatch.index + slashMatch[0].length))
       setCursorPosition(newCursorPos)
 
-      setTimeout(() => {
+      // Clear any existing timeout
+      if (focusTimeoutRef.current) {
+        clearTimeout(focusTimeoutRef.current)
+      }
+
+      focusTimeoutRef.current = setTimeout(() => {
         if (textareaRef.current) {
           textareaRef.current.focus()
           textareaRef.current.setSelectionRange(newCursorPos, newCursorPos)
@@ -46,22 +58,12 @@ export function ChatInput({
     const newCursorPosition = e.target.selectionStart
     onChange(newValue)
     setCursorPosition(newCursorPosition)
-
-    const textBeforeCursor = newValue.substring(0, newCursorPosition)
-    const lastLine = textBeforeCursor.split('\n').pop()
-    const isSlashCommand = /^\/\w*$/.test(lastLine)
-
-    setShowSlashCommands(isSlashCommand)
+    setShowSlashCommands(isSlashCommandActive(newValue, newCursorPosition))
   }
 
   const handleSelect = (e) => {
     setCursorPosition(e.target.selectionStart)
-
-    const textBeforeCursor = e.target.value.substring(0, e.target.selectionStart)
-    const lastLine = textBeforeCursor.split('\n').pop()
-    const isSlashCommand = /^\/\w*$/.test(lastLine)
-
-    setShowSlashCommands(isSlashCommand)
+    setShowSlashCommands(isSlashCommandActive(e.target.value, e.target.selectionStart))
   }
 
   const handleKeyDown = (e) => {
@@ -73,11 +75,14 @@ export function ChatInput({
     }
   }
 
+  // Cleanup timeout on unmount
   useEffect(() => {
-    if (textareaRef.current && isFocused) {
-      textareaRef.current.focus()
+    return () => {
+      if (focusTimeoutRef.current) {
+        clearTimeout(focusTimeoutRef.current)
+      }
     }
-  }, [isFocused])
+  }, [])
 
   // 自动调整 textarea 高度
   useEffect(() => {
@@ -88,7 +93,7 @@ export function ChatInput({
   }, [value])
 
   return (
-    <div className={`input-wrapper ${isFocused ? 'focused' : ''}`}>
+    <div className="input-wrapper">
       <textarea
         ref={textareaRef}
         className="input-field"
@@ -97,8 +102,6 @@ export function ChatInput({
         onChange={handleChange}
         onSelect={handleSelect}
         onKeyDown={handleKeyDown}
-        onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
         rows={1}
         disabled={disabled}
       />

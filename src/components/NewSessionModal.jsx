@@ -1,4 +1,31 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { getAuthHeaders } from '../utils/api'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
+
+// Debounce hook
+function useDebounce(callback, delay) {
+  const timeoutRef = useRef(null)
+
+  const debounced = useCallback((...args) => {
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+    }
+    timeoutRef.current = setTimeout(() => {
+      callback(...args)
+    }, delay)
+  }, [callback, delay])
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
+
+  return debounced
+}
 
 export function NewSessionModal({
   isOpen,
@@ -13,20 +40,21 @@ export function NewSessionModal({
   const [showSuggestions, setShowSuggestions] = useState(false)
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false)
 
+  // Use custom hook for scroll lock
+  useModalScrollLock(isOpen)
+
   // 获取目录建议
-  const fetchDirectorySuggestions = async (path) => {
+  const fetchDirectorySuggestions = useCallback(async (path) => {
     if (!path) {
       setDirectorySuggestions([])
       return
     }
-    
+
     setIsLoadingSuggestions(true)
     try {
-      const headers = {}
-      if (authToken) {
-        headers.Authorization = `Bearer ${authToken}`
-      }
-      const response = await fetch(`/api/list-dirs?path=${encodeURIComponent(path)}`, { headers })
+      const response = await fetch(`/api/list-dirs?path=${encodeURIComponent(path)}`, {
+        headers: getAuthHeaders(authToken)
+      })
       const data = await response.json()
       if (data.dirs) {
         setDirectorySuggestions(data.dirs)
@@ -38,15 +66,18 @@ export function NewSessionModal({
     } finally {
       setIsLoadingSuggestions(false)
     }
-  }
+  }, [authToken])
+
+  // Debounced version of fetch
+  const debouncedFetch = useDebounce(fetchDirectorySuggestions, 300)
 
   const handleDirectoryChange = (e) => {
     const value = e.target.value
     setDirectory(value)
-    
-    // 当输入 / 或路径结束时，获取建议
+
+    // 当输入 / 或路径结束时，获取建议（debounced）
     if (value.endsWith('/') || value.split('/').length > 1) {
-      fetchDirectorySuggestions(value)
+      debouncedFetch(value)
     } else {
       setShowSuggestions(false)
     }
@@ -68,16 +99,6 @@ export function NewSessionModal({
     setDirectory('')
     setPermission('default')
   }
-
-  // 移动端优化：弹窗打开时禁用背景滚动
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-      return () => {
-        document.body.style.overflow = ''
-      }
-    }
-  }, [isOpen])
 
   // 关闭时重置表单
   useEffect(() => {

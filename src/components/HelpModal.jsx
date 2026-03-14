@@ -1,59 +1,10 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
+import { useModalScrollLock } from '../hooks/useModalScrollLock'
 
-export function HelpModal({
-  isOpen,
-  onClose,
-  onManageCLITokens
-}) {
-  const [copied, setCopied] = useState(false)
-
-  const copyToClipboard = () => {
-    const server = window.location.origin
-    const fullCommand = `SERVER=${server} TOKEN=<CLI_TOKEN> bash -c "$(curl -fsSLk ${server}/cli/install.sh)"`
-
-    if (navigator.clipboard && navigator.clipboard.writeText) {
-      navigator.clipboard.writeText(fullCommand).then(() => {
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      }).catch(() => {
-        fallbackCopy(fullCommand)
-      })
-    } else {
-      fallbackCopy(fullCommand)
-    }
-  }
-
-  const fallbackCopy = (text) => {
-    const textArea = document.createElement('textarea')
-    textArea.value = text
-    textArea.style.position = 'fixed'
-    textArea.style.left = '-9999px'
-    textArea.style.top = '0'
-    document.body.appendChild(textArea)
-    textArea.focus()
-    textArea.select()
-    try {
-      document.execCommand('copy')
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch (err) {
-      console.error('复制失败:', err)
-    }
-    document.body.removeChild(textArea)
-  }
-
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-      return () => {
-        document.body.style.overflow = ''
-      }
-    }
-  }, [isOpen])
+export function HelpModal({ isOpen, onClose }) {
+  useModalScrollLock(isOpen)
 
   if (!isOpen) return null
-
-  const server = window.location.origin
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -65,37 +16,8 @@ export function HelpModal({
         <div className="modal-body help-body">
           <section className="help-section">
             <div className="help-section-header">
-              <span className="help-section-icon">🚀</span>
-              <h4>CLI 安装</h4>
-            </div>
-            <p className="help-desc">在远程机器上安装 CLI 工作器：</p>
-            <div className="install-command">
-              <code>SERVER={server} TOKEN=&lt;CLI_TOKEN&gt; bash -c "$(curl -fsSLk {server}/cli/install.sh)"</code>
-              <button onClick={copyToClipboard} className={`copy-button ${copied ? 'copied' : ''}`}>
-                {copied ? '✅' : '📋'}
-              </button>
-            </div>
-            <p className="help-desc" style={{ marginTop: '12px', fontSize: '0.9em', color: '#888' }}>
-              💡 请先在侧边栏底部点击「CLI Token 管理」创建 Token，然后替换上述命令中的 &lt;CLI_TOKEN&gt;
-            </p>
-            {onManageCLITokens && (
-              <button
-                onClick={() => {
-                  onClose()
-                  onManageCLITokens()
-                }}
-                className="btn btn-primary"
-                style={{ marginTop: '12px' }}
-              >
-                打开 CLI Token 管理
-              </button>
-            )}
-          </section>
-
-          <section className="help-section">
-            <div className="help-section-header">
               <span className="help-section-icon">⌨️</span>
-              <h4>键盘快捷键</h4>
+              <h4>快捷键</h4>
             </div>
             <div className="shortcut-grid">
               <div className="shortcut-item">
@@ -111,33 +33,25 @@ export function HelpModal({
                 <span>停止生成</span>
               </div>
               <div className="shortcut-item">
-                <kbd>Ctrl+?</kbd>
-                <span>帮助</span>
-              </div>
-              <div className="shortcut-item">
                 <kbd>Ctrl+B</kbd>
                 <span>侧边栏</span>
               </div>
               <div className="shortcut-item">
                 <kbd>Enter</kbd>
-                <span>发送</span>
+                <span>发送消息</span>
               </div>
             </div>
           </section>
 
           <section className="help-section">
             <div className="help-section-header">
-              <span className="help-section-icon">📜</span>
-              <h4>Slash 命令</h4>
+              <span className="help-section-icon">💬</span>
+              <h4>斜杠命令</h4>
             </div>
             <div className="command-list">
               <div className="command-item">
-                <code>/help</code>
-                <span>帮助信息</span>
-              </div>
-              <div className="command-item">
                 <code>/new</code>
-                <span>创建会话</span>
+                <span>新建会话</span>
               </div>
               <div className="command-item">
                 <code>/clear</code>
@@ -149,7 +63,7 @@ export function HelpModal({
               </div>
               <div className="command-item">
                 <code>/status</code>
-                <span>显示状态</span>
+                <span>查看状态</span>
               </div>
             </div>
           </section>

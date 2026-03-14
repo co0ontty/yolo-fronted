@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Sidebar } from './components/Sidebar'
 import { ChatView } from './components/ChatView'
 import { NewSessionModal } from './components/NewSessionModal'
@@ -8,9 +8,36 @@ import { CommandPalette } from './components/CommandPalette'
 import { ChatInput } from './components/ChatInput'
 import { MarkdownContent } from './components/MarkdownContent'
 import { Login } from './components/Login'
-import { CLITokenManager } from './components/CLITokenManager'
+import { SettingsModal } from './components/SettingsModal'
 import { useWebSocket } from './hooks/useWebSocket'
+import { getAuthHeaders } from './utils/api'
+import { copyToClipboard } from './utils/clipboard'
 import './App.mobile.css'
+
+// Helper function to find the last incomplete assistant message
+function findIncompleteAssistantMessage(messages, sessionId) {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    if (messages[i].sessionId === sessionId && messages[i].role === 'assistant' && !messages[i].isComplete) {
+      return i
+    }
+  }
+  return -1
+}
+
+// Helper function to map backend message format to frontend format
+function mapMessage(msg) {
+  return {
+    id: msg.id || `${msg.session_id}-${msg.time}`,
+    sessionId: msg.session_id,
+    role: msg.role,
+    content: msg.content,
+    time: new Date(msg.time),
+    isComplete: msg.is_complete
+  }
+}
+
+// WebSocket URL is static, compute once
+const WS_URL = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`
 
 function App() {
   const [sessions, setSessions] = useState([])
@@ -27,9 +54,9 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authToken, setAuthToken] = useState(null)
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
-  const [isCLITokenManagerOpen, setIsCLITokenManagerOpen] = useState(false)
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
 
-  const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`
+  // Helper to extract session ID from various message formats
   const getSessionId = useCallback((data) => data?.session_id || data?.session || data?.content?.session_id || null, [])
 
   // 检查认证状态
@@ -38,12 +65,7 @@ function App() {
       const token = localStorage.getItem('auth_token')
 
       try {
-        const headers = {}
-        if (token) {
-          headers.Authorization = `Bearer ${token}`
-        }
-
-        const response = await fetch('/api/check-session', { headers })
+        const response = await fetch('/api/check-session', { headers: getAuthHeaders(token) })
         const data = await response.json()
         if (data.authenticated) {
           setIsAuthenticated(true)
@@ -70,9 +92,7 @@ function App() {
     try {
       await fetch('/api/logout', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${authToken}`,
-        },
+        headers: getAuthHeaders(authToken),
       })
     } catch (err) {
       console.error('登出失败:', err)
@@ -102,18 +122,11 @@ function App() {
     if (!currentSession || isGenerating) return
     const updatedSession = sessions.find(session => session.id === currentSession.id)
     if (!updatedSession?.messages) return
-    setMessages(updatedSession.messages.map(msg => ({
-      id: msg.id || `${msg.session_id}-${msg.time}`,
-      sessionId: msg.session_id,
-      role: msg.role,
-      content: msg.content,
-      time: new Date(msg.time),
-      isComplete: msg.is_complete
-    })))
+    setMessages(updatedSession.messages.map(mapMessage))
   }, [sessions, currentSession, isGenerating])
 
   const { sendMessage, isConnected, cliConnected } = useWebSocket(
-    wsUrl,
+    WS_URL,
     (message) => {
       const data = JSON.parse(message)
 
@@ -146,19 +159,13 @@ function App() {
     const sessionId = getSessionId(data)
     setIsGenerating(true)
     setMessages(prev => {
+      const index = findIncompleteAssistantMessage(prev, sessionId)
+      if (index === -1) return prev
+
       const updated = [...prev]
-      let index = -1
-      for (let i = updated.length - 1; i >= 0; i--) {
-        if (updated[i].sessionId === sessionId && updated[i].role === 'assistant' && !updated[i].isComplete) {
-          index = i
-          break
-        }
-      }
-      if (index !== -1) {
-        // 后端发送的是 data.content (字符串)，不是 data.content.text
-        const textContent = typeof data.content === 'string' ? data.content : (data.content?.text || '')
-        updated[index] = { ...updated[index], content: updated[index].content + textContent }
-      }
+      // 后端发送的是 data.content (字符串)，不是 data.content.text
+      const textContent = typeof data.content === 'string' ? data.content : (data.content?.text || '')
+      updated[index] = { ...updated[index], content: updated[index].content + textContent }
       return updated
     })
   }
@@ -167,17 +174,11 @@ function App() {
     const sessionId = getSessionId(data)
     setIsGenerating(false)
     setMessages(prev => {
+      const index = findIncompleteAssistantMessage(prev, sessionId)
+      if (index === -1) return prev
+
       const updated = [...prev]
-      let index = -1
-      for (let i = updated.length - 1; i >= 0; i--) {
-        if (updated[i].sessionId === sessionId && updated[i].role === 'assistant' && !updated[i].isComplete) {
-          index = i
-          break
-        }
-      }
-      if (index !== -1) {
-        updated[index] = { ...updated[index], isComplete: true }
-      }
+      updated[index] = { ...updated[index], isComplete: true }
       return updated
     })
   }
@@ -192,14 +193,7 @@ function App() {
 
   const handleSelectSession = (session) => {
     if (session.messages && session.messages.length > 0) {
-      setMessages(session.messages.map(msg => ({
-        id: msg.id || `${msg.session_id}-${msg.time}`,
-        sessionId: msg.session_id,
-        role: msg.role,
-        content: msg.content,
-        time: new Date(msg.time),
-        isComplete: msg.is_complete
-      })))
+      setMessages(session.messages.map(mapMessage))
     } else {
       setMessages([])
     }
@@ -404,20 +398,20 @@ function App() {
     }
   }
 
-  const copyLastResponse = () => {
+  const copyLastResponse = async () => {
     const lastAssistantMessage = [...messages].reverse().find(m => m.role === 'assistant')
     if (lastAssistantMessage) {
-      navigator.clipboard.writeText(lastAssistantMessage.content)
-        .then(() => {
-          setMessages(prev => [...prev, {
-            id: Date.now().toString(),
-            sessionId: currentSession?.id,
-            role: 'system',
-            content: '✅ 已复制到最后回复',
-            time: new Date(),
-            isComplete: true
-          }])
-        })
+      const success = await copyToClipboard(lastAssistantMessage.content)
+      if (success) {
+        setMessages(prev => [...prev, {
+          id: Date.now().toString(),
+          sessionId: currentSession?.id,
+          role: 'system',
+          content: '✅ 已复制到最后回复',
+          time: new Date(),
+          isComplete: true
+        }])
+      }
     }
   }
 
@@ -485,14 +479,12 @@ function App() {
         currentSession={currentSession}
         onSelectSession={handleSelectSession}
         onNewSession={() => setIsNewSessionModalOpen(true)}
-        onHelp={() => setIsHelpModalOpen(true)}
         onDeleteSession={handleDeleteSession}
         isConnected={isConnected}
         cliConnected={cliConnected}
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         onLogout={handleLogout}
-        onManageCLITokens={() => setIsCLITokenManagerOpen(true)}
       />
 
       {/* 侧边栏遮罩 */}
@@ -513,6 +505,16 @@ function App() {
               <span className={sidebarOpen ? 'open' : ''}></span>
               <span></span>
               <span></span>
+            </button>
+            <button
+              className="icon-btn"
+              onClick={() => setIsNewSessionModalOpen(true)}
+              aria-label="新建会话"
+              title="新建会话 (Ctrl+N)"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M12 5v14M5 12h14"/>
+              </svg>
             </button>
           </div>
 
@@ -545,14 +547,13 @@ function App() {
             </button>
             <button
               className="icon-btn"
-              onClick={() => setIsHelpModalOpen(true)}
-              aria-label="帮助文档"
-              title="帮助文档 (Ctrl+?)"
+              onClick={() => setIsSettingsModalOpen(true)}
+              aria-label="设置"
+              title="设置"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10"/>
-                <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
-                <path d="M12 17h.01"/>
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
               </svg>
             </button>
           </div>
@@ -626,7 +627,6 @@ function App() {
       <HelpModal
         isOpen={isHelpModalOpen}
         onClose={() => setIsHelpModalOpen(false)}
-        onManageCLITokens={() => setIsCLITokenManagerOpen(true)}
       />
 
       <PermissionModal
@@ -643,11 +643,10 @@ function App() {
         currentSession={currentSession}
       />
 
-      <CLITokenManager
-        isOpen={isCLITokenManagerOpen}
-        onClose={() => setIsCLITokenManagerOpen(false)}
+      <SettingsModal
+        isOpen={isSettingsModalOpen}
+        onClose={() => setIsSettingsModalOpen(false)}
         authToken={authToken}
-        serverUrl={`${window.location.protocol}//${window.location.host}`}
       />
     </div>
   )
