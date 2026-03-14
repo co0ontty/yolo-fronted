@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 
-export function useWebSocket(url, onMessage, authToken) {
+export function useWebSocket(url, onMessage, authToken, shouldConnect = true) {
   const [isConnected, setIsConnected] = useState(false)
   const [cliConnected, setCliConnected] = useState(false)
   const wsRef = useRef(null)
@@ -31,7 +31,8 @@ export function useWebSocket(url, onMessage, authToken) {
           const data = JSON.parse(event.data)
           // 拦截 cli_status 消息
           if (data.type === 'cli_status') {
-            setCliConnected(data.content?.connected ?? false)
+            const payload = typeof data.content === 'string' ? JSON.parse(data.content) : data.content
+            setCliConnected(!!(payload && payload.connected))
             return
           }
         } catch (e) {
@@ -73,7 +74,7 @@ export function useWebSocket(url, onMessage, authToken) {
   }, [])
 
   useEffect(() => {
-    if (authToken) {
+    if (shouldConnect) {
       connect()
     }
 
@@ -85,7 +86,7 @@ export function useWebSocket(url, onMessage, authToken) {
         clearTimeout(reconnectRef.current)
       }
     }
-  }, [connect, authToken])
+  }, [connect, shouldConnect])
 
   return {
     isConnected,

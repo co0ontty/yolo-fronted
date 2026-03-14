@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react'
 
 export function HelpModal({
   isOpen,
-  onClose
+  onClose,
+  onManageCLITokens
 }) {
   const [copied, setCopied] = useState(false)
 
   const copyToClipboard = () => {
     const server = window.location.origin
-    const fullCommand = `bash -c "$(curl -fsSLk ${server}/cli/install.sh)"`
+    const fullCommand = `SERVER=${server} TOKEN=<CLI_TOKEN> bash -c "$(curl -fsSLk ${server}/cli/install.sh)"`
 
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(fullCommand).then(() => {
@@ -69,11 +70,26 @@ export function HelpModal({
             </div>
             <p className="help-desc">在远程机器上安装 CLI 工作器：</p>
             <div className="install-command">
-              <code>bash -c "$(curl -fsSLk {server}/cli/install.sh)"</code>
+              <code>SERVER={server} TOKEN=&lt;CLI_TOKEN&gt; bash -c "$(curl -fsSLk {server}/cli/install.sh)"</code>
               <button onClick={copyToClipboard} className={`copy-button ${copied ? 'copied' : ''}`}>
                 {copied ? '✅' : '📋'}
               </button>
             </div>
+            <p className="help-desc" style={{ marginTop: '12px', fontSize: '0.9em', color: '#888' }}>
+              💡 请先在侧边栏底部点击「CLI Token 管理」创建 Token，然后替换上述命令中的 &lt;CLI_TOKEN&gt;
+            </p>
+            {onManageCLITokens && (
+              <button
+                onClick={() => {
+                  onClose()
+                  onManageCLITokens()
+                }}
+                className="btn btn-primary"
+                style={{ marginTop: '12px' }}
+              >
+                打开 CLI Token 管理
+              </button>
+            )}
           </section>
 
           <section className="help-section">

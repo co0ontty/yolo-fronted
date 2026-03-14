@@ -40,7 +40,8 @@ export function Sidebar({
   cliConnected,
   isOpen,
   onToggle,
-  onLogout
+  onLogout,
+  onManageCLITokens
 }) {
   // 按创建时间倒序排列（最新的在最上面）
   const sortedSessions = [...sessions].sort((a, b) => {
@@ -118,6 +119,11 @@ export function Sidebar({
       </div>
 
       <div className="sidebar-footer">
+        {onManageCLITokens && (
+          <button onClick={onManageCLITokens} className="cli-token-btn">
+            🔑 CLI Token 管理
+          </button>
+        )}
         <button onClick={onLogout} className="logout-btn">
           退出登录
         </button>

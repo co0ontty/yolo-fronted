@@ -8,6 +8,7 @@ import { CommandPalette } from './components/CommandPalette'
 import { ChatInput } from './components/ChatInput'
 import { MarkdownContent } from './components/MarkdownContent'
 import { Login } from './components/Login'
+import { CLITokenManager } from './components/CLITokenManager'
 import { useWebSocket } from './hooks/useWebSocket'
 import './App.mobile.css'
 
@@ -26,28 +27,27 @@ function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false)
   const [authToken, setAuthToken] = useState(null)
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
+  const [isCLITokenManagerOpen, setIsCLITokenManagerOpen] = useState(false)
 
   const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/ws`
+  const getSessionId = useCallback((data) => data?.session_id || data?.session || data?.content?.session_id || null, [])
 
   // 检查认证状态
   useEffect(() => {
     const checkAuth = async () => {
       const token = localStorage.getItem('auth_token')
-      if (!token) {
-        setIsCheckingAuth(false)
-        return
-      }
 
       try {
-        const response = await fetch('/api/check-session', {
-          headers: {
-            'Authorization': `Bearer ${token}`,
-          },
-        })
+        const headers = {}
+        if (token) {
+          headers.Authorization = `Bearer ${token}`
+        }
+
+        const response = await fetch('/api/check-session', { headers })
         const data = await response.json()
         if (data.authenticated) {
           setIsAuthenticated(true)
-          setAuthToken(token)
+          setAuthToken(token || null)
         }
       } catch (err) {
         console.error('检查认证状态失败:', err)
@@ -85,6 +85,33 @@ function App() {
     setMessages([])
   }, [authToken])
 
+  useEffect(() => {
+    if (!currentSession) return
+    const updatedSession = sessions.find(session => session.id === currentSession.id)
+    if (!updatedSession) {
+      setCurrentSession(null)
+      setMessages([])
+      return
+    }
+    if (updatedSession.directory !== currentSession.directory || updatedSession.permission !== currentSession.permission) {
+      setCurrentSession(updatedSession)
+    }
+  }, [sessions, currentSession])
+
+  useEffect(() => {
+    if (!currentSession || isGenerating) return
+    const updatedSession = sessions.find(session => session.id === currentSession.id)
+    if (!updatedSession?.messages) return
+    setMessages(updatedSession.messages.map(msg => ({
+      id: msg.id || `${msg.session_id}-${msg.time}`,
+      sessionId: msg.session_id,
+      role: msg.role,
+      content: msg.content,
+      time: new Date(msg.time),
+      isComplete: msg.is_complete
+    })))
+  }, [sessions, currentSession, isGenerating])
+
   const { sendMessage, isConnected, cliConnected } = useWebSocket(
     wsUrl,
     (message) => {
@@ -111,16 +138,18 @@ function App() {
           break
       }
     },
-    authToken
+    authToken,
+    isAuthenticated
   )
 
   const handleStreamMessage = (data) => {
+    const sessionId = getSessionId(data)
     setIsGenerating(true)
     setMessages(prev => {
       const updated = [...prev]
       let index = -1
       for (let i = updated.length - 1; i >= 0; i--) {
-        if (updated[i].sessionId === data.session_id && updated[i].role === 'assistant' && !updated[i].isComplete) {
+        if (updated[i].sessionId === sessionId && updated[i].role === 'assistant' && !updated[i].isComplete) {
           index = i
           break
         }
@@ -135,12 +164,13 @@ function App() {
   }
 
   const handleMessageComplete = (data) => {
+    const sessionId = getSessionId(data)
     setIsGenerating(false)
     setMessages(prev => {
       const updated = [...prev]
       let index = -1
       for (let i = updated.length - 1; i >= 0; i--) {
-        if (updated[i].sessionId === data.session_id && updated[i].role === 'assistant' && !updated[i].isComplete) {
+        if (updated[i].sessionId === sessionId && updated[i].role === 'assistant' && !updated[i].isComplete) {
           index = i
           break
         }
@@ -161,8 +191,19 @@ function App() {
   }
 
   const handleSelectSession = (session) => {
+    if (session.messages && session.messages.length > 0) {
+      setMessages(session.messages.map(msg => ({
+        id: msg.id || `${msg.session_id}-${msg.time}`,
+        sessionId: msg.session_id,
+        role: msg.role,
+        content: msg.content,
+        time: new Date(msg.time),
+        isComplete: msg.is_complete
+      })))
+    } else {
+      setMessages([])
+    }
     setCurrentSession(session)
-    setMessages([])
     setSidebarOpen(false)
   }
 
@@ -451,6 +492,7 @@ function App() {
         isOpen={sidebarOpen}
         onToggle={() => setSidebarOpen(!sidebarOpen)}
         onLogout={handleLogout}
+        onManageCLITokens={() => setIsCLITokenManagerOpen(true)}
       />
 
       {/* 侧边栏遮罩 */}
@@ -524,15 +566,11 @@ function App() {
               <div className="messages-container">
                 {messages.map(message => (
                   <div key={message.id} className={`message ${message.role}`}>
-                    <div className="message-header">
-                      <span className="message-role">
-                        {message.role === 'user' ? '你' : message.role === 'assistant' ? 'AI' : '系统'}
-                      </span>
+                    <div className="message-role">
+                      {message.role === 'user' ? '你' : message.role === 'assistant' ? 'AI' : '系统'}
                     </div>
-                    <div className={`message-bubble ${!message.isComplete ? 'streaming' : ''}`}>
-                      <div className="message-content">
-                        {renderMessageContent(message)}
-                      </div>
+                    <div className={`message-content ${!message.isComplete ? 'streaming' : ''}`}>
+                      {renderMessageContent(message)}
                     </div>
                   </div>
                 ))}
@@ -582,11 +620,13 @@ function App() {
         isOpen={isNewSessionModalOpen}
         onClose={() => setIsNewSessionModalOpen(false)}
         onSubmit={handleNewSession}
+        authToken={authToken}
       />
 
       <HelpModal
         isOpen={isHelpModalOpen}
         onClose={() => setIsHelpModalOpen(false)}
+        onManageCLITokens={() => setIsCLITokenManagerOpen(true)}
       />
 
       <PermissionModal
@@ -601,6 +641,13 @@ function App() {
         onExecute={handleCommandPaletteExecute}
         sessions={sessions}
         currentSession={currentSession}
+      />
+
+      <CLITokenManager
+        isOpen={isCLITokenManagerOpen}
+        onClose={() => setIsCLITokenManagerOpen(false)}
+        authToken={authToken}
+        serverUrl={`${window.location.protocol}//${window.location.host}`}
       />
     </div>
   )
