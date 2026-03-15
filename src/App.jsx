@@ -7,6 +7,7 @@ import { PermissionModal } from './components/PermissionModal'
 import { CommandPalette } from './components/CommandPalette'
 import { ChatInput } from './components/ChatInput'
 import { MarkdownContent } from './components/MarkdownContent'
+import { MessageBlocks } from './components/MessageBlocks'
 import { Login } from './components/Login'
 import { SettingsModal } from './components/SettingsModal'
 import { useWebSocket } from './hooks/useWebSocket'
@@ -31,6 +32,7 @@ function mapMessage(msg) {
     sessionId: msg.session_id,
     role: msg.role,
     content: msg.content,
+    blocks: null, // historical messages don't have blocks
     time: new Date(msg.time),
     isComplete: msg.is_complete
   }
@@ -146,6 +148,15 @@ function App() {
         case 'tool_use_request':
           handleToolUseRequest(data)
           break
+        case 'tool_result':
+          handleToolResult(data)
+          break
+        case 'block_start':
+          handleBlockStart(data)
+          break
+        case 'block_stop':
+          handleBlockStop(data)
+          break
         case 'token_usage':
           setTokenUsage(data.content)
           break
@@ -155,18 +166,114 @@ function App() {
     isAuthenticated
   )
 
-  const handleStreamMessage = (data) => {
-    const sessionId = getSessionId(data)
-    setIsGenerating(true)
+  // Helper to update blocks on the current incomplete assistant message
+  const updateAssistantBlocks = (sessionId, updater) => {
     setMessages(prev => {
       const index = findIncompleteAssistantMessage(prev, sessionId)
       if (index === -1) return prev
 
       const updated = [...prev]
-      // 后端发送的是 data.content (字符串)，不是 data.content.text
-      const textContent = typeof data.content === 'string' ? data.content : (data.content?.text || '')
-      updated[index] = { ...updated[index], content: updated[index].content + textContent }
+      const msg = { ...updated[index] }
+      const blocks = [...(msg.blocks || [])]
+      updater(blocks, msg)
+      msg.blocks = blocks
+      updated[index] = msg
       return updated
+    })
+  }
+
+  const handleStreamMessage = (data) => {
+    const sessionId = getSessionId(data)
+    setIsGenerating(true)
+
+    const contentType = typeof data.content === 'string' ? 'text' : (data.content?.type || 'text')
+    const textContent = typeof data.content === 'string' ? data.content : (data.content?.text || data.content?.thinking || '')
+
+    if (!textContent) return
+
+    setMessages(prev => {
+      const index = findIncompleteAssistantMessage(prev, sessionId)
+      if (index === -1) return prev
+
+      const updated = [...prev]
+      const msg = { ...updated[index] }
+      const blocks = [...(msg.blocks || [])]
+
+      // Append to last block if same type, otherwise create new block
+      const lastBlock = blocks[blocks.length - 1]
+      if (lastBlock && lastBlock.type === contentType && !lastBlock.isComplete) {
+        blocks[blocks.length - 1] = { ...lastBlock, content: lastBlock.content + textContent }
+      } else {
+        blocks.push({ type: contentType, content: textContent, isComplete: false })
+      }
+
+      msg.blocks = blocks
+      msg.content = (msg.content || '') + textContent
+      updated[index] = msg
+      return updated
+    })
+  }
+
+  const handleBlockStart = (data) => {
+    const sessionId = getSessionId(data)
+    const blockType = data.content?.block_type
+    if (!blockType) return
+
+    // If there's a pending block of different type, mark it complete
+    updateAssistantBlocks(sessionId, (blocks) => {
+      const lastBlock = blocks[blocks.length - 1]
+      if (lastBlock && !lastBlock.isComplete) {
+        blocks[blocks.length - 1] = { ...lastBlock, isComplete: true }
+      }
+    })
+  }
+
+  const handleBlockStop = (data) => {
+    const sessionId = getSessionId(data)
+
+    updateAssistantBlocks(sessionId, (blocks) => {
+      const lastBlock = blocks[blocks.length - 1]
+      if (lastBlock && !lastBlock.isComplete) {
+        blocks[blocks.length - 1] = { ...lastBlock, isComplete: true }
+      }
+    })
+  }
+
+  const handleToolUseRequest = (data) => {
+    const sessionId = getSessionId(data)
+    const content = data.content
+    setIsGenerating(true)
+
+    updateAssistantBlocks(sessionId, (blocks) => {
+      // Mark any pending block as complete
+      const lastBlock = blocks[blocks.length - 1]
+      if (lastBlock && !lastBlock.isComplete) {
+        blocks[blocks.length - 1] = { ...lastBlock, isComplete: true }
+      }
+      blocks.push({
+        type: 'tool_use',
+        toolName: content.tool_name,
+        description: content.description,
+        parameters: content.parameters,
+        summary: content.summary,
+        content: '',
+        isComplete: true
+      })
+    })
+  }
+
+  const handleToolResult = (data) => {
+    const sessionId = getSessionId(data)
+    const content = data.content
+
+    updateAssistantBlocks(sessionId, (blocks) => {
+      blocks.push({
+        type: 'tool_result',
+        toolName: content.tool_name,
+        success: content.success,
+        content: content.output || '',
+        isComplete: true
+      })
     })
   }
 
@@ -178,7 +285,14 @@ function App() {
       if (index === -1) return prev
 
       const updated = [...prev]
-      updated[index] = { ...updated[index], isComplete: true }
+      const msg = { ...updated[index] }
+
+      // Mark all blocks as complete
+      if (msg.blocks) {
+        msg.blocks = msg.blocks.map(b => ({ ...b, isComplete: true }))
+      }
+      msg.isComplete = true
+      updated[index] = msg
       return updated
     })
   }
@@ -229,6 +343,7 @@ function App() {
       sessionId: currentSession.id,
       role: 'user',
       content: text,
+      blocks: null,
       time: new Date(),
       isComplete: true
     }, {
@@ -236,6 +351,7 @@ function App() {
       sessionId: currentSession.id,
       role: 'assistant',
       content: '',
+      blocks: [],
       time: new Date(),
       isComplete: false
     }])
@@ -253,7 +369,6 @@ function App() {
   const handleSlashCommand = (text) => {
     const parts = text.slice(1).split(' ')
     const command = parts[0].toLowerCase()
-    const args = parts.slice(1).join(' ')
 
     switch (command) {
       case 'help':
@@ -298,18 +413,6 @@ function App() {
       command: content.command,
       filePath: content.file_path
     })
-  }
-
-  const handleToolUseRequest = (data) => {
-    const content = data.content
-    setMessages(prev => [...prev, {
-      id: (Date.now() + 1).toString(),
-      sessionId: content.session_id,
-      role: 'system',
-      content: `🔧 工具调用：${content.tool_name}`,
-      time: new Date(),
-      isComplete: true
-    }])
   }
 
   const handlePermissionResponse = (requestId, granted, allowSession) => {
@@ -369,7 +472,7 @@ function App() {
     if (!currentSession || messages.length === 0) return
 
     const markdown = messages.map(msg => {
-      const role = msg.role === 'user' ? '🧑 You' : msg.role === 'assistant' ? '🤖 AI' : '⚙️ System'
+      const role = msg.role === 'user' ? 'You' : msg.role === 'assistant' ? 'AI' : 'System'
       return `## ${role}\n\n${msg.content}\n`
     }).join('\n---\n\n')
 
@@ -407,7 +510,7 @@ function App() {
           id: Date.now().toString(),
           sessionId: currentSession?.id,
           role: 'system',
-          content: '✅ 已复制到最后回复',
+          content: 'Copied',
           time: new Date(),
           isComplete: true
         }])
@@ -448,6 +551,11 @@ function App() {
   }, [currentSession])
 
   const renderMessageContent = (message) => {
+    // If blocks are available (live streaming), render block-based UI
+    if (message.role === 'assistant' && message.blocks && message.blocks.length > 0) {
+      return <MessageBlocks blocks={message.blocks} isComplete={message.isComplete} />
+    }
+    // Fallback: render as markdown (for historical messages or user messages)
     if (message.role === 'assistant' || message.role === 'user') {
       return <MarkdownContent content={message.content} />
     }
@@ -460,7 +568,7 @@ function App() {
       <div className="app-container">
         <div className="loading-screen">
           <div className="loading-spinner"></div>
-          <p>加载中...</p>
+          <p>Loading...</p>
         </div>
       </div>
     )
@@ -473,7 +581,6 @@ function App() {
 
   return (
     <div className="app-container">
-      {/* 侧边栏 */}
       <Sidebar
         sessions={sessions}
         currentSession={currentSession}
@@ -487,20 +594,17 @@ function App() {
         onLogout={handleLogout}
       />
 
-      {/* 侧边栏遮罩 */}
       {sidebarOpen && (
         <div className="sidebar-overlay" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {/* 主内容区域 */}
       <div className="main-content">
-        {/* 顶部导航栏 */}
         <header className="top-nav">
           <div className="top-nav-left">
             <button
               className="menu-toggle"
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              aria-label="切换菜单"
+              aria-label="Toggle menu"
             >
               <span className={sidebarOpen ? 'open' : ''}></span>
               <span></span>
@@ -509,8 +613,8 @@ function App() {
             <button
               className="icon-btn"
               onClick={() => setIsNewSessionModalOpen(true)}
-              aria-label="新建会话"
-              title="新建会话 (Ctrl+N)"
+              aria-label="New session"
+              title="New Session (Ctrl+N)"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M12 5v14M5 12h14"/>
@@ -537,8 +641,8 @@ function App() {
             <button
               className="icon-btn"
               onClick={() => setIsCommandPaletteOpen(true)}
-              aria-label="命令面板"
-              title="命令面板 (Ctrl+K)"
+              aria-label="Command palette"
+              title="Command Palette (Ctrl+K)"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8"/>
@@ -548,8 +652,8 @@ function App() {
             <button
               className="icon-btn"
               onClick={() => setIsSettingsModalOpen(true)}
-              aria-label="设置"
-              title="设置"
+              aria-label="Settings"
+              title="Settings"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <circle cx="12" cy="12" r="3"/>
@@ -559,16 +663,14 @@ function App() {
           </div>
         </header>
 
-        {/* 聊天内容 */}
         <div className="chat-container">
           {currentSession ? (
             <>
-              {/* 消息列表 */}
               <div className="messages-container">
                 {messages.map(message => (
                   <div key={message.id} className={`message ${message.role}`}>
                     <div className="message-role">
-                      {message.role === 'user' ? '你' : message.role === 'assistant' ? 'AI' : '系统'}
+                      {message.role === 'user' ? 'You' : message.role === 'assistant' ? 'AI' : 'System'}
                     </div>
                     <div className={`message-content ${!message.isComplete ? 'streaming' : ''}`}>
                       {renderMessageContent(message)}
@@ -578,7 +680,6 @@ function App() {
                 <div className="message-list-end" />
               </div>
 
-              {/* 输入区域 */}
               <div className="input-area">
                 <ChatInput
                   value={inputText}
@@ -587,7 +688,7 @@ function App() {
                   onStop={stopGeneration}
                   isGenerating={isGenerating}
                   disabled={isGenerating || !cliConnected}
-                  placeholder={cliConnected ? "输入消息，或输入 / 查看命令..." : "CLI 未连接"}
+                  placeholder={cliConnected ? "Type a message, or / for commands..." : "CLI not connected"}
                 />
               </div>
             </>
@@ -599,7 +700,7 @@ function App() {
                   Code with<br /><span>AI.</span>
                 </h1>
                 <p className="welcome-subtitle">
-                  创建一个会话，开始与 Claude Code 协作编程。
+                  Create a session to start coding with Claude Code.
                 </p>
                 <button
                   className="quick-start-btn"
@@ -608,7 +709,7 @@ function App() {
                   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2.5">
                     <path d="M12 5v14M5 12h14"/>
                   </svg>
-                  新建会话
+                  New Session
                 </button>
               </div>
             </div>
@@ -616,7 +717,6 @@ function App() {
         </div>
       </div>
 
-      {/* 模态框 */}
       <NewSessionModal
         isOpen={isNewSessionModalOpen}
         onClose={() => setIsNewSessionModalOpen(false)}
