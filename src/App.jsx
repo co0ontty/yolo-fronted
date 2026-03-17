@@ -13,6 +13,7 @@ import { SettingsModal } from './components/SettingsModal'
 import { useWebSocket } from './hooks/useWebSocket'
 import { getAuthHeaders } from './utils/api'
 import { copyToClipboard } from './utils/clipboard'
+import { normalizeTextContent, normalizeRawEventPayload, rebuildBlocksFromContent } from './utils/messageFormatting'
 import './App.mobile.css'
 
 // Helper function to find the last incomplete assistant message
@@ -27,12 +28,13 @@ function findIncompleteAssistantMessage(messages, sessionId) {
 
 // Helper function to map backend message format to frontend format
 function mapMessage(msg) {
+  const normalizedContent = normalizeTextContent(msg.content)
   return {
     id: msg.id || `${msg.session_id}-${msg.time}`,
     sessionId: msg.session_id,
     role: msg.role,
-    content: msg.content,
-    blocks: null, // historical messages don't have blocks
+    content: normalizedContent,
+    blocks: msg.role === 'assistant' ? rebuildBlocksFromContent(normalizedContent) : null,
     time: new Date(msg.time),
     isComplete: msg.is_complete
   }
@@ -57,6 +59,70 @@ function App() {
   const [authToken, setAuthToken] = useState(null)
   const [isCheckingAuth, setIsCheckingAuth] = useState(true)
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false)
+  const [showRawEvents, setShowRawEvents] = useState(() => localStorage.getItem('show_raw_events') === 'true')
+  const messagesContainerRef = useRef(null)
+  const shouldAutoScrollRef = useRef(true)
+
+  useEffect(() => {
+    localStorage.setItem('show_raw_events', String(showRawEvents))
+  }, [showRawEvents])
+
+  useEffect(() => {
+    const root = document.documentElement
+
+    const updateViewportMetrics = () => {
+      const visualViewport = window.visualViewport
+      const viewportHeight = visualViewport?.height || window.innerHeight
+      const keyboardInset = Math.max(0, window.innerHeight - viewportHeight)
+
+      root.style.setProperty('--app-height', `${viewportHeight}px`)
+      root.style.setProperty('--keyboard-inset', `${keyboardInset}px`)
+      root.classList.toggle('keyboard-visible', keyboardInset > 120)
+    }
+
+    updateViewportMetrics()
+
+    const visualViewport = window.visualViewport
+    window.addEventListener('resize', updateViewportMetrics)
+    window.addEventListener('orientationchange', updateViewportMetrics)
+    visualViewport?.addEventListener('resize', updateViewportMetrics)
+    visualViewport?.addEventListener('scroll', updateViewportMetrics)
+
+    return () => {
+      window.removeEventListener('resize', updateViewportMetrics)
+      window.removeEventListener('orientationchange', updateViewportMetrics)
+      visualViewport?.removeEventListener('resize', updateViewportMetrics)
+      visualViewport?.removeEventListener('scroll', updateViewportMetrics)
+      root.classList.remove('keyboard-visible')
+    }
+  }, [])
+
+  const scrollMessagesToBottom = useCallback((behavior = 'smooth') => {
+    const container = messagesContainerRef.current
+    if (!container) return
+
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior,
+    })
+  }, [])
+
+  const handleMessagesScroll = useCallback((e) => {
+    const container = e.currentTarget
+    const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight
+    shouldAutoScrollRef.current = distanceFromBottom < 120
+  }, [])
+
+  useEffect(() => {
+    if (!currentSession) return
+    shouldAutoScrollRef.current = true
+    requestAnimationFrame(() => scrollMessagesToBottom('auto'))
+  }, [currentSession?.id, scrollMessagesToBottom])
+
+  useEffect(() => {
+    if (!messages.length || !shouldAutoScrollRef.current) return
+    requestAnimationFrame(() => scrollMessagesToBottom(isGenerating ? 'auto' : 'smooth'))
+  }, [messages, isGenerating, scrollMessagesToBottom])
 
   // Helper to extract session ID from various message formats
   const getSessionId = useCallback((data) => data?.session_id || data?.session || data?.content?.session_id || null, [])
@@ -88,6 +154,12 @@ function App() {
     setIsAuthenticated(true)
     setAuthToken(token)
   }, [])
+
+  useEffect(() => {
+    if (!isCheckingAuth && !isAuthenticated && !authToken) {
+      setIsAuthenticated(true)
+    }
+  }, [isCheckingAuth, isAuthenticated, authToken])
 
   // 处理登出
   const handleLogout = useCallback(async () => {
@@ -151,6 +223,9 @@ function App() {
         case 'tool_result':
           handleToolResult(data)
           break
+        case 'raw_event':
+          if (showRawEvents) handleRawEvent(data)
+          break
         case 'block_start':
           handleBlockStart(data)
           break
@@ -187,7 +262,7 @@ function App() {
     setIsGenerating(true)
 
     const contentType = typeof data.content === 'string' ? 'text' : (data.content?.type || 'text')
-    const textContent = typeof data.content === 'string' ? data.content : (data.content?.text || data.content?.thinking || '')
+    const textContent = normalizeTextContent(typeof data.content === 'string' ? data.content : (data.content?.text || data.content?.thinking || ''))
 
     if (!textContent) return
 
@@ -208,7 +283,9 @@ function App() {
       }
 
       msg.blocks = blocks
-      msg.content = (msg.content || '') + textContent
+      if (contentType === 'text') {
+        msg.content = (msg.content || '') + textContent
+      }
       updated[index] = msg
       return updated
     })
@@ -271,8 +348,26 @@ function App() {
         type: 'tool_result',
         toolName: content.tool_name,
         success: content.success,
-        content: content.output || '',
+        content: normalizeTextContent(content.output || ''),
         isComplete: true
+      })
+    })
+  }
+
+  const handleRawEvent = (data) => {
+    // 原始事件默认不展示；开启调试后再以只读块形式附加，便于排查格式问题。
+    const sessionId = getSessionId(data)
+    const payload = normalizeRawEventPayload(data.content?.payload)
+    const eventType = data.content?.event_type || 'raw'
+    if (!payload) return
+
+    updateAssistantBlocks(sessionId, (blocks) => {
+      blocks.push({
+        type: 'tool_result',
+        toolName: `Raw ${eventType}`,
+        success: true,
+        content: payload,
+        isComplete: true,
       })
     })
   }
@@ -338,15 +433,19 @@ function App() {
       return
     }
 
+    // 如果当前会话仍有未完成 assistant 消息，说明 CLI 进程还活着，
+    // 此时把用户输入作为续写输入发回同一个前台进程，而不是新开一轮任务。
+    const hasPendingAssistant = findIncompleteAssistantMessage(messages, currentSession.id) !== -1
+
     setMessages(prev => [...prev, {
       id: Date.now().toString(),
       sessionId: currentSession.id,
       role: 'user',
-      content: text,
+      content: normalizeTextContent(text),
       blocks: null,
       time: new Date(),
       isComplete: true
-    }, {
+    }, ...(!hasPendingAssistant ? [{
       id: (Date.now() + 1).toString(),
       sessionId: currentSession.id,
       role: 'assistant',
@@ -354,17 +453,17 @@ function App() {
       blocks: [],
       time: new Date(),
       isComplete: false
-    }])
+    }] : [])])
 
     sendMessage({
-      type: 'chat',
+      type: hasPendingAssistant ? 'session_input' : 'chat',
       content: {
         session_id: currentSession.id,
-        message: text
+        ...(hasPendingAssistant ? { input: text } : { message: text })
       }
     })
     setInputText('')
-  }, [currentSession, sendMessage])
+  }, [currentSession, sendMessage, messages])
 
   const handleSlashCommand = (text) => {
     const parts = text.slice(1).split(' ')
@@ -557,7 +656,7 @@ function App() {
     }
     // Fallback: render as markdown (for historical messages or user messages)
     if (message.role === 'assistant' || message.role === 'user') {
-      return <MarkdownContent content={message.content} />
+      return <MarkdownContent content={normalizeTextContent(message.content)} />
     }
     return <span>{message.content}</span>
   }
@@ -602,11 +701,11 @@ function App() {
         <header className="top-nav">
           <div className="top-nav-left">
             <button
-              className="menu-toggle"
+              className={`menu-toggle ${sidebarOpen ? 'open' : ''}`}
               onClick={() => setSidebarOpen(!sidebarOpen)}
               aria-label="Toggle menu"
             >
-              <span className={sidebarOpen ? 'open' : ''}></span>
+              <span></span>
               <span></span>
               <span></span>
             </button>
@@ -630,6 +729,7 @@ function App() {
                   <span className={`nav-badge mode-${currentSession.permission}`}>
                     {currentSession.permission}
                   </span>
+                  {isGenerating && <span className="nav-hint-badge">会话进行中，可继续回复</span>}
                 </div>
               </div>
             ) : (
@@ -666,7 +766,21 @@ function App() {
         <div className="chat-container">
           {currentSession ? (
             <>
-              <div className="messages-container">
+              <div
+                className="messages-container"
+                ref={messagesContainerRef}
+                onScroll={handleMessagesScroll}
+              >
+                {!cliConnected && (
+                  <div className="connection-banner warning">
+                    CLI 工作器未连接，当前无法执行任务。请在“设置”里复制安装命令并启动 worker。
+                  </div>
+                )}
+                {cliConnected && !isConnected && (
+                  <div className="connection-banner warning">
+                    正在重连服务器，消息发送可能会延迟。
+                  </div>
+                )}
                 {messages.map(message => (
                   <div key={message.id} className={`message ${message.role}`}>
                     <div className="message-role">
@@ -677,7 +791,7 @@ function App() {
                     </div>
                   </div>
                 ))}
-                <div className="message-list-end" />
+                <div className="message-list-end" aria-hidden="true" />
               </div>
 
               <div className="input-area">
@@ -687,8 +801,8 @@ function App() {
                   onSend={handleSendMessage}
                   onStop={stopGeneration}
                   isGenerating={isGenerating}
-                  disabled={isGenerating || !cliConnected}
-                  placeholder={cliConnected ? "Type a message, or / for commands..." : "CLI not connected"}
+                  disabled={!cliConnected}
+                  placeholder={!cliConnected ? 'CLI 未连接' : isGenerating ? '可继续回复当前任务...' : '输入消息，或输入 / 使用命令...'}
                 />
               </div>
             </>
@@ -747,6 +861,8 @@ function App() {
         isOpen={isSettingsModalOpen}
         onClose={() => setIsSettingsModalOpen(false)}
         authToken={authToken}
+        showRawEvents={showRawEvents}
+        onToggleRawEvents={setShowRawEvents}
       />
     </div>
   )

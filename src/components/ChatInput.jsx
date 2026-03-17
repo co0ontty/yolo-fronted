@@ -22,6 +22,16 @@ export function ChatInput({
   const textareaRef = useRef(null)
   const focusTimeoutRef = useRef(null)
 
+  const scrollIntoComfortView = useCallback(() => {
+    const textarea = textareaRef.current
+    if (!textarea) return
+
+    requestAnimationFrame(() => {
+      textarea.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+      window.scrollTo({ top: 0, behavior: 'smooth' })
+    })
+  }, [])
+
   const handleSlashCommandSelect = useCallback((command) => {
     const textBeforeCursor = value.substring(0, cursorPosition)
     const textAfterCursor = value.substring(cursorPosition)
@@ -99,11 +109,21 @@ export function ChatInput({
         className="input-field"
         placeholder={placeholder}
         value={value}
+        name="chat-message"
         onChange={handleChange}
         onSelect={handleSelect}
         onKeyDown={handleKeyDown}
+        onFocus={scrollIntoComfortView}
+        onClick={scrollIntoComfortView}
         rows={1}
         disabled={disabled}
+        autoComplete="off"
+        autoCorrect="off"
+        autoCapitalize="off"
+        spellCheck={false}
+        data-form-type="other"
+        enterKeyHint="send"
+        inputMode="text"
       />
 
       <div className="input-buttons">

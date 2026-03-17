@@ -5,10 +5,36 @@ export function useWebSocket(url, onMessage, authToken, shouldConnect = true) {
   const [cliConnected, setCliConnected] = useState(false)
   const wsRef = useRef(null)
   const reconnectRef = useRef(null)
+  const reconnectAttemptRef = useRef(0)
+  const shouldReconnectRef = useRef(shouldConnect)
   const onMessageRef = useRef(onMessage)
   onMessageRef.current = onMessage
+  shouldReconnectRef.current = shouldConnect
+
+  const clearReconnectTimer = useCallback(() => {
+    if (reconnectRef.current) {
+      clearTimeout(reconnectRef.current)
+      reconnectRef.current = null
+    }
+  }, [])
+
+  const closeSocket = useCallback(() => {
+    if (wsRef.current) {
+      const socket = wsRef.current
+      wsRef.current = null
+      socket.onclose = null
+      socket.close()
+    }
+  }, [])
 
   const connect = useCallback(() => {
+    if (!shouldReconnectRef.current) {
+      return
+    }
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.OPEN || wsRef.current.readyState === WebSocket.CONNECTING)) {
+      return
+    }
+
     try {
       // 添加 token 参数到 URL 用于认证
       const separator = url.includes('?') ? '&' : '?'
@@ -20,10 +46,8 @@ export function useWebSocket(url, onMessage, authToken, shouldConnect = true) {
       ws.onopen = () => {
         console.log('WebSocket 连接成功')
         setIsConnected(true)
-        if (reconnectRef.current) {
-          clearTimeout(reconnectRef.current)
-          reconnectRef.current = null
-        }
+        reconnectAttemptRef.current = 0
+        clearReconnectTimer()
       }
 
       ws.onmessage = (event) => {
@@ -47,10 +71,16 @@ export function useWebSocket(url, onMessage, authToken, shouldConnect = true) {
         console.log('WebSocket 连接断开')
         setIsConnected(false)
         setCliConnected(false)
-        // 自动重连
+        wsRef.current = null
+        if (!shouldReconnectRef.current) {
+          clearReconnectTimer()
+          return
+        }
+        reconnectAttemptRef.current += 1
+        const delay = Math.min(3000 * reconnectAttemptRef.current, 15000)
         reconnectRef.current = setTimeout(() => {
           connect()
-        }, 3000)
+        }, delay)
       }
 
       ws.onerror = (error) => {
@@ -63,7 +93,7 @@ export function useWebSocket(url, onMessage, authToken, shouldConnect = true) {
       console.error('建立 WebSocket 连接失败:', error)
       setIsConnected(false)
     }
-  }, [url, authToken])
+  }, [authToken, clearReconnectTimer, url])
 
   const sendMessage = useCallback((data) => {
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
@@ -76,17 +106,20 @@ export function useWebSocket(url, onMessage, authToken, shouldConnect = true) {
   useEffect(() => {
     if (shouldConnect) {
       connect()
+    } else {
+      clearReconnectTimer()
+      closeSocket()
+      setIsConnected(false)
+      setCliConnected(false)
+      reconnectAttemptRef.current = 0
     }
 
     return () => {
-      if (wsRef.current) {
-        wsRef.current.close()
-      }
-      if (reconnectRef.current) {
-        clearTimeout(reconnectRef.current)
-      }
+      shouldReconnectRef.current = false
+      clearReconnectTimer()
+      closeSocket()
     }
-  }, [connect, shouldConnect])
+  }, [clearReconnectTimer, closeSocket, connect, shouldConnect])
 
   return {
     isConnected,

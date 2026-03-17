@@ -1,5 +1,12 @@
 import React, { useState, useMemo } from 'react'
 import { MarkdownContent } from './MarkdownContent'
+import {
+  normalizeTextContent,
+  formatThinkingPreview,
+  countMeaningfulLines,
+  formatToolParameters,
+  detectTodoList,
+} from '../utils/messageFormatting'
 
 // SVG icons as components
 const ChevronIcon = ({ expanded }) => (
@@ -39,16 +46,17 @@ const ToolIcon = ({ name }) => {
 // Thinking block - collapsible, shows last line by default
 function ThinkingBlock({ content, isComplete }) {
   const [expanded, setExpanded] = useState(false)
+  const normalizedContent = useMemo(() => normalizeTextContent(content), [content])
 
   const lastLine = useMemo(() => {
-    if (!content) return ''
-    const lines = content.trim().split('\n').filter(l => l.trim())
-    return lines[lines.length - 1] || ''
-  }, [content])
+    return formatThinkingPreview(normalizedContent)
+  }, [normalizedContent])
 
   const lineCount = useMemo(() => {
-    return content ? content.trim().split('\n').filter(l => l.trim()).length : 0
-  }, [content])
+    return countMeaningfulLines(normalizedContent)
+  }, [normalizedContent])
+
+  const todoItems = useMemo(() => detectTodoList(normalizedContent), [normalizedContent])
 
   return (
     <div className={`block-thinking ${expanded ? 'expanded' : ''}`}>
@@ -64,7 +72,20 @@ function ThinkingBlock({ content, isComplete }) {
       </div>
       {expanded ? (
         <div className="block-body">
-          <div className="thinking-content">{content}</div>
+          {todoItems ? (
+            <div className="thinking-todo-list">
+              {todoItems.map((item, index) => (
+                <div key={index} className="thinking-todo-item">
+                  <span className={`thinking-todo-check ${item.checked ? 'checked' : item.unchecked ? 'unchecked' : ''}`}>
+                    {item.checked ? '✓' : '•'}
+                  </span>
+                  <span className="thinking-todo-label">{item.label}</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="thinking-content">{normalizedContent}</div>
+          )}
         </div>
       ) : (
         <div className="block-preview">
@@ -79,29 +100,23 @@ function ThinkingBlock({ content, isComplete }) {
 function ToolUseBlock({ toolName, summary, parameters, description }) {
   const [expanded, setExpanded] = useState(false)
   const isAgent = toolName === 'Agent' || toolName === 'Task'
-
-  let parsedParams = null
-  if (parameters) {
-    try {
-      parsedParams = typeof parameters === 'string' ? JSON.parse(parameters) : parameters
-    } catch { /* ignore */ }
-  }
+  const formattedParams = useMemo(() => formatToolParameters(parameters), [parameters])
 
   const displaySummary = summary || description || ''
 
   return (
     <div className={`block-tool-use ${isAgent ? 'is-agent' : ''}`}>
-      <div className="block-header" onClick={() => parameters && setExpanded(!expanded)}>
+      <div className="block-header" onClick={() => formattedParams && setExpanded(!expanded)}>
         <ToolIcon name={toolName} />
         <span className="block-label">{toolName}</span>
         {displaySummary && (
           <span className="tool-summary">{displaySummary}</span>
         )}
-        {parameters && <ChevronIcon expanded={expanded} />}
+        {formattedParams && <ChevronIcon expanded={expanded} />}
       </div>
-      {expanded && parsedParams && (
+      {expanded && formattedParams && (
         <div className="block-body">
-          <pre className="tool-params">{JSON.stringify(parsedParams, null, 2)}</pre>
+          <pre className="tool-params">{formattedParams}</pre>
         </div>
       )}
     </div>
@@ -111,16 +126,17 @@ function ToolUseBlock({ toolName, summary, parameters, description }) {
 // Tool result block - collapsible output
 function ToolResultBlock({ toolName, success, content }) {
   const [expanded, setExpanded] = useState(false)
+  const normalizedContent = useMemo(() => normalizeTextContent(content), [content])
 
-  const hasContent = content && content.trim().length > 0
-  const isLong = hasContent && content.split('\n').length > 3
+  const hasContent = normalizedContent && normalizedContent.trim().length > 0
+  const isLong = hasContent && normalizedContent.split('\n').length > 3
 
   const preview = useMemo(() => {
     if (!hasContent) return success ? 'OK' : 'Failed'
-    const lines = content.trim().split('\n')
-    if (lines.length <= 3) return content.trim()
+    const lines = normalizedContent.trim().split('\n')
+    if (lines.length <= 3) return normalizedContent.trim()
     return lines.slice(0, 2).join('\n') + '...'
-  }, [content, success, hasContent])
+  }, [normalizedContent, success, hasContent])
 
   return (
     <div className={`block-tool-result ${success ? 'success' : 'failure'}`}>
@@ -133,7 +149,7 @@ function ToolResultBlock({ toolName, success, content }) {
       </div>
       {hasContent && (
         <div className={`block-body ${isLong && !expanded ? 'truncated' : ''}`}>
-          <pre className="tool-output">{expanded ? content : preview}</pre>
+          <pre className="tool-output">{expanded ? normalizedContent : preview}</pre>
         </div>
       )}
     </div>
@@ -142,10 +158,11 @@ function ToolResultBlock({ toolName, success, content }) {
 
 // Text block - rendered as markdown
 function TextBlock({ content }) {
-  if (!content || !content.trim()) return null
+  const normalizedContent = normalizeTextContent(content)
+  if (!normalizedContent || !normalizedContent.trim()) return null
   return (
     <div className="block-text">
-      <MarkdownContent content={content} />
+      <MarkdownContent content={normalizedContent} />
     </div>
   )
 }

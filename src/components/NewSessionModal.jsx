@@ -92,8 +92,9 @@ export function NewSessionModal({
 
   const handleSubmit = (e) => {
     e.preventDefault()
+    if (!directory.trim()) return
     onSubmit({
-      directory,
+      directory: directory.trim(),
       permission
     })
     setDirectory('')
@@ -174,7 +175,7 @@ export function NewSessionModal({
                     {permission === 'default' ? '默认模式' : permission === 'acceptEdits' ? '自动接受编辑' : 'YOLO 模式'}
                   </span>
                   <span className="permission-card-desc">
-                    {permission === 'default' ? '所有操作都需要你的确认' : permission === 'acceptEdits' ? '自动接受文件编辑，其他操作需确认' : ' bypasses 所有权限确认'}
+                    {permission === 'default' ? '所有操作都需要你的确认' : permission === 'acceptEdits' ? '自动接受文件编辑，其他操作需确认' : '自动执行所有操作，仅建议在可信环境使用'}
                   </span>
                 </div>
               </div>

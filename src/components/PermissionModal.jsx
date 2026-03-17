@@ -1,7 +1,13 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 export function PermissionModal({ isOpen, request, onRespond }) {
   const [allowSession, setAllowSession] = useState(false)
+
+  useEffect(() => {
+    if (isOpen) {
+      setAllowSession(false)
+    }
+  }, [isOpen, request?.requestId])
 
   if (!isOpen || !request) return null
 

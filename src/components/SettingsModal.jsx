@@ -12,7 +12,7 @@ function generateRandomName() {
   return `${adj}${noun}`
 }
 
-export function SettingsModal({ isOpen, onClose, authToken }) {
+export function SettingsModal({ isOpen, onClose, authToken, showRawEvents, onToggleRawEvents }) {
   const [tokens, setTokens] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -82,7 +82,7 @@ export function SettingsModal({ isOpen, onClose, authToken }) {
 
   const getInstallCommand = (token) => {
     const baseUrl = window.location.origin
-    return `SERVER=${baseUrl} TOKEN=${token} bash -c "$(curl -fsSLk ${baseUrl}/cli/install.sh)"`
+    return `SERVER=${baseUrl} TOKEN=${token} bash -c "$(curl -fsSLk '${baseUrl}/cli/install.sh')"`
   }
 
   const handleCopy = async (text) => {
@@ -120,6 +120,26 @@ export function SettingsModal({ isOpen, onClose, authToken }) {
         </div>
 
         <div className="modal-body">
+          <section className="settings-section">
+            <div className="section-header">
+              <span className="section-icon">🧪</span>
+              <h4>调试显示</h4>
+            </div>
+
+            <div className="section-desc">
+              面向普通使用时建议关闭原始事件显示，仅在排查输出格式问题时开启。
+            </div>
+
+            <label className="allow-session-checkbox">
+              <input
+                type="checkbox"
+                checked={!!showRawEvents}
+                onChange={(e) => onToggleRawEvents?.(e.target.checked)}
+              />
+              <span>显示原始 JSON 事件块</span>
+            </label>
+          </section>
+
           <section className="settings-section">
             <div className="section-header">
               <span className="section-icon">🔑</span>
